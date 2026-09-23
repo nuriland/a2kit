@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("\t00\xf000")
+byte('É')
+bool(true)

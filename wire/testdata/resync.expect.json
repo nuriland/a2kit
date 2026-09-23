@@ -1,0 +1,12 @@
+[
+  {
+    "opcode": "04 38",
+    "payload_len": 41,
+    "flags": "resynced"
+  },
+  {
+    "opcode": "05 38",
+    "payload_len": 20,
+    "flags": "-"
+  }
+]

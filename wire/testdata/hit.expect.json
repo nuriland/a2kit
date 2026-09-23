@@ -1,0 +1,22 @@
+[
+  {
+    "opcode": "04 38",
+    "payload_len": 41,
+    "flags": "-"
+  },
+  {
+    "opcode": "04 38",
+    "payload_len": 41,
+    "flags": "server"
+  },
+  {
+    "opcode": "05 38",
+    "payload_len": 20,
+    "flags": "server"
+  },
+  {
+    "opcode": "33 36",
+    "payload_len": 12,
+    "flags": "server"
+  }
+]

@@ -1,0 +1,117 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            flags: -race
+          - os: macos-latest
+            flags: -race
+          - os: windows-latest
+            cgo: '0' # the runner has no Npcap, so no cgo, and without cgo no -race
+    runs-on: ${{ matrix.os }}
+    env:
+      CGO_ENABLED: ${{ matrix.cgo || '1' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - run: go vet ./...
+      - run: go test ${{ matrix.flags }} ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+      - name: test without cgo
+        run: CGO_ENABLED=0 go test ./...
+      - name: fixtures match their generator
+        run: go generate ./wire && test -z "$(git status --porcelain)" || { git status --short; exit 1; }
+
+  build:
+    name: build (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: [test, lint]
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest, goos: linux, goarch: amd64, cgo: '1' }
+          - { os: macos-latest, goos: darwin, goarch: arm64, cgo: '1' }
+          # Npcap is loaded at run time, so Windows needs no cgo, and Linux cross-compiles it.
+          - { os: ubuntu-latest, goos: windows, goarch: amd64, cgo: '0' }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - if: matrix.goos == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - name: build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        # An archive keeps the binary executable, which a bare artifact would not.
+        run: |
+          name=dump-$GOOS-$GOARCH
+          bin=dump
+          if [ "$GOOS" = windows ]; then bin=dump.exe; fi
+          go build -trimpath -ldflags='-s -w' -o "out/$bin" ./cmd/dump
+          mkdir dist
+          if [ "$GOOS" = windows ]; then
+            (cd out && zip "../dist/$name.zip" "$bin")
+          else
+            tar -C out -czf "dist/$name.tar.gz" "$bin"
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dump-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dump-*
+          path: dist
+          merge-multiple: true
+      - name: publish
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum dump-* > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" dump-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes
