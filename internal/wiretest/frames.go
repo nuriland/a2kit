@@ -1,5 +1,3 @@
-// Package wiretest builds bytes for tests: AION 2 frames and bundles, the
-// TCP packets that carry them, and the pcap and pcapng files that hold those.
 package wiretest
 
 import (
@@ -25,6 +23,7 @@ func AppendFrame(b []byte, op0, op1 byte, size int) []byte {
 	return b
 }
 
+// AppendBundle appends a frame whose body is an FF FF bundle holding plain.
 func AppendBundle(b, plain []byte) []byte {
 	return appendBundle(b, nil, plain)
 }

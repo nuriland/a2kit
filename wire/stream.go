@@ -3,7 +3,6 @@ package wire
 import (
 	"bytes"
 	"cmp"
-	"maps"
 	"net/netip"
 	"slices"
 	"time"
@@ -33,8 +32,8 @@ type stream struct {
 	at     time.Time // the capture time of the bytes being parsed
 	closed time.Time // the time of its FIN or RST, zero while open
 	fr     framer
-	born   uint64
-	frames int // frames counted toward the lock
+	born   uint64 // its number among the decoder's streams, for a stable order
+	frames int    // frames counted toward the lock
 
 	// Reassembly, for FeedSegment.
 	synced    bool   // next is set
@@ -107,8 +106,8 @@ func (d *Decoder) stream(k key, t time.Time) *stream {
 
 	st := &stream{key: k, last: t, born: d.born}
 	st.fr = framer{
-		knownOnly: d.c.KnownOnly,
-		log:       d.l,
+		knownOnly: d.config.KnownOnly,
+		log:       d.log,
 		emit:      func(body []byte, flags Flags) { d.emit(st, body, flags) },
 	}
 	if d.srv != nil {
@@ -195,7 +194,7 @@ func (d *Decoder) deliver(st *stream, p []byte, t time.Time) {
 // starts like a TLS record is skipped and counted as lost. The locked pair is never skipped.
 func (d *Decoder) take(st *stream, p []byte, t time.Time) {
 	st.at = t
-	if !d.c.ParseTLS && st.dir == 0 && tlsLike(p) {
+	if !d.config.ParseTLS && st.dir == 0 && tlsLike(p) {
 		st.fr.lose(len(p))
 		return
 	}
@@ -223,24 +222,10 @@ func (d *Decoder) skip(st *stream, seq uint32) {
 	if len(st.held) > 0 && after(seq, st.held[0].seq) {
 		to = st.held[0].seq
 	}
-	d.l.Warn("tcp gap lost", "bytes", to-st.next)
+	d.log.Warn("tcp gap lost", "bytes", to-st.next)
 	st.fr.lose(int(to - st.next))
 	st.next = to
 	d.release(st)
-}
-
-// Flush treats the capture as ended: every gap is given up, and what streams held while waiting
-// for more bytes is parsed. Decode calls Flush when its reader ends.
-func (d *Decoder) Flush() {
-	sts := slices.SortedFunc(maps.Values(d.streams), func(a, b *stream) int { return cmp.Compare(a.born, b.born) })
-	for _, st := range sts {
-		for d.streams[st.key] == st && len(st.held) > 0 { // a lock taken here drops the other streams
-			d.skip(st, st.held[0].seq)
-		}
-		if d.streams[st.key] == st {
-			st.fr.end()
-		}
-	}
 }
 
 // tlsLike reports whether p starts like a TLS record: a type from 20 to 23, then version 3.0 to 3.4.

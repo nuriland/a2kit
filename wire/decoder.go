@@ -2,20 +2,23 @@ package wire
 
 import (
 	"bytes"
+	"cmp"
 	"io"
 	"iter"
 	"log/slog"
+	"maps"
 	"net/netip"
+	"slices"
 	"time"
 )
 
 // Config configures a Decoder. The zero Config is ready to use.
 type Config struct {
-	EmitClient bool          // keep the client side's frames, default false
-	KnownOnly  bool          // keep only known opcodes, and take no others as plausible, default false
-	ParseTLS   bool          // parse segments that start like TLS records, default false
-	LockIdle   time.Duration // the silence that ends the lock, default 60s
-	Logger     *slog.Logger  // resyncs, locks and lost gaps, default silent
+	EmitClient bool          // keep the client side's frames too
+	KnownOnly  bool          // keep only known opcodes, and take no others as plausible
+	ParseTLS   bool          // parse segments that start like TLS records
+	LockIdle   time.Duration // the silence that ends the lock, 60s if zero
+	Logger     *slog.Logger  // resyncs, locks and lost gaps, nil is silent
 }
 
 // slabSize is the allocation that payloads are copied into, many frames to one.
@@ -24,8 +27,8 @@ const slabSize = 16 << 10
 // Decoder turns TCP segments into frames, and keeps them until they are taken. It is not safe
 // for concurrent use.
 type Decoder struct {
-	c Config
-	l *slog.Logger
+	config Config
+	log    *slog.Logger
 
 	born    uint64          // streams made
 	closing int             // streams that have seen a FIN or RST, for sweep
@@ -48,7 +51,7 @@ func NewDecoder(config Config) *Decoder {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Decoder{c: config, l: log, streams: make(map[key]*stream)}
+	return &Decoder{config: config, log: log, streams: make(map[key]*stream)}
 }
 
 // Feed adds a payload that has no sequence number. Each direction's payloads must be fed in
@@ -123,6 +126,20 @@ func (d *Decoder) Frames() iter.Seq[Frame] {
 	}
 }
 
+// Flush treats the capture as ended: every gap is given up, and what streams held while waiting
+// for more bytes is parsed. Decode calls Flush when its reader ends.
+func (d *Decoder) Flush() {
+	sts := slices.SortedFunc(maps.Values(d.streams), func(a, b *stream) int { return cmp.Compare(a.born, b.born) })
+	for _, st := range sts {
+		for d.streams[st.key] == st && len(st.held) > 0 { // a lock taken here drops the other streams
+			d.skip(st, st.held[0].seq)
+		}
+		if d.streams[st.key] == st {
+			st.fr.end()
+		}
+	}
+}
+
 // Decode reads r to its end and yields frames as its segments complete them. It calls Flush
 // when r ends. A read error other than io.EOF is yielded last.
 func (d *Decoder) Decode(r SegmentReader) iter.Seq2[Frame, error] {
@@ -153,10 +170,10 @@ func (d *Decoder) Decode(r SegmentReader) iter.Seq2[Frame, error] {
 func (d *Decoder) emit(st *stream, body []byte, flags Flags) {
 	op := opcode(body)
 	flags |= d.lockFrame(st, op, flags)
-	if flags&FromClient != 0 && !d.c.EmitClient {
+	if flags&FromClient != 0 && !d.config.EmitClient {
 		return
 	}
-	if d.c.KnownOnly && !op.Known() {
+	if d.config.KnownOnly && !op.Known() {
 		return
 	}
 	d.queue = append(d.queue, Frame{
@@ -171,8 +188,8 @@ func (d *Decoder) emit(st *stream, body []byte, flags Flags) {
 }
 
 // keep returns a copy of p for a frame to own. Payloads share slabs, so that a frame costs an
-// allocation only once in a while, and a frame that is kept keeps its slab. A copy's capacity is
-// its length, so that appending to one cannot reach the next.
+// allocation only once in a while, and a frame that is kept keeps its slab. A copy from a slab is
+// capped at its length, so that appending to one cannot reach the next.
 func (d *Decoder) keep(p []byte) []byte {
 	if len(p) > slabSize/4 {
 		return bytes.Clone(p)

@@ -68,21 +68,15 @@ func (f *framer) write(p []byte) {
 // longer line up with what follows and are dropped, after any bytes held for the envelope check
 // at the start are parsed.
 func (f *framer) lose(n int) {
-	f.settle()
+	if !f.begun {
+		f.begun = true // no envelopes begin at the start
+		f.pump()
+	}
 	f.skipped += len(f.buf) + n
 	f.buf = f.buf[:0]
-	f.begun, f.aligned, f.waiting = true, false, false
+	f.aligned, f.waiting = false, false
 	if f.env.on {
 		f.env.skip(n)
-	}
-}
-
-// settle decides that no envelopes begin at the start of the stream, and parses the bytes held
-// while that was undecided.
-func (f *framer) settle() {
-	if !f.begun {
-		f.begun = true
-		f.pump()
 	}
 }
 

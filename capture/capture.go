@@ -12,10 +12,9 @@ import (
 	"github.com/nuriland/a2kit/wire"
 )
 
-// ErrNoLive is returned by OpenLive and Devices in a build without cgo, outside Windows.
 var (
-	ErrNoLive     = errors.New("capture: live capture needs cgo on this platform")
-	errNotCapture = errors.New("not a pcap or pcapng file")
+	errNotCapture = errors.New("not a pcap or pcapng file")                        // errNotCapture is returned by newContainer if the file is not a pcap or pcapng file.
+	ErrNoLive     = errors.New("capture: live capture needs cgo on this platform") // ErrNoLive is returned by OpenLive and Devices in a build without cgo, outside Windows.
 )
 
 // Device is a device that can be captured live.

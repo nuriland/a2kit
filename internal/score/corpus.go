@@ -18,7 +18,8 @@ var (
 	cli = netip.MustParseAddrPort("10.0.0.1:10000")
 )
 
-// mix gives each family's share of frames, as in real traffic, and in three families the share of their commonest opcode
+// mix gives each family's share of frames, as in real traffic, and in three families the share of
+// their commonest opcode.
 var mix = [...]family{
 	{0x38, 0.455, 0x04, 0.34},
 	{0x36, 0.261, 0x00, 0.89},
@@ -38,6 +39,7 @@ type family struct {
 	often  float64 // and its share of the family
 }
 
+// small is the payload sizes a small frame draws from.
 var small = [...]int{0, 1, 2, 5, 12, 41, 200, 300}
 
 // A corpus is captures of one server stream each, damaged the way captures are.
@@ -191,7 +193,7 @@ func (s *sampler) capture(b []byte) []byte {
 	for range 1 + s.r.IntN(3) {
 		if len(order) > 4 {
 			i := 1 + s.r.IntN(len(order)-1)
-			order = append(order[:i], order[i+1:]...)
+			order = slices.Delete(order, i, i+1)
 		}
 	}
 

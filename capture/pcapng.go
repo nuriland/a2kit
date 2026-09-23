@@ -85,11 +85,12 @@ func (n *pcapng) readBlock() (typ uint32, body []byte, err error) {
 		if err != nil {
 			return 0, nil, errTruncated
 		}
-		if binary.LittleEndian.Uint32(magic) == ngByteOrder {
+		switch {
+		case binary.LittleEndian.Uint32(magic) == ngByteOrder:
 			n.order = binary.LittleEndian
-		} else if binary.BigEndian.Uint32(magic) == ngByteOrder {
+		case binary.BigEndian.Uint32(magic) == ngByteOrder:
 			n.order = binary.BigEndian
-		} else {
+		default:
 			return 0, nil, errors.New("pcapng: bad byte-order magic")
 		}
 		n.ifaces = n.ifaces[:0]

@@ -126,8 +126,7 @@ func (l *Live) Close() error {
 	return nil
 }
 
-// defaultDevice returns the first device that is up, has an address, is not a loopback, and is not
-// known to be disconnected.
+// defaultDevice is the device OpenLive opens when none is named.
 func defaultDevice() (string, error) {
 	ifs, err := pcap.FindAllDevs()
 	if err != nil {

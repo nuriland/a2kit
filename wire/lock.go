@@ -17,8 +17,8 @@ func (d *Decoder) admit(k key, t time.Time) bool {
 		return true
 	}
 
-	if t.Sub(d.lockAt) > d.c.LockIdle {
-		d.l.Info("flow idle, hunting")
+	if t.Sub(d.lockAt) > d.config.LockIdle {
+		d.log.Info("flow idle, hunting")
 		d.unlock()
 		return true
 	}
@@ -60,7 +60,7 @@ func (d *Decoder) lock(st *stream, why string) {
 			d.drop(o)
 		}
 	}
-	d.l.Info("flow locked", "src", st.key.src, "dst", st.key.dst, "why", why)
+	d.log.Info("flow locked", "src", st.key.src, "dst", st.key.dst, "why", why)
 }
 
 // unlock returns the decoder to hunting.
