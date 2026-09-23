@@ -12,12 +12,13 @@ import (
 	"github.com/nuriland/a2kit/wire"
 )
 
-// ErrNoLive is what OpenLive and Devices return in a build without cgo outside Windows
+// ErrNoLive is returned by OpenLive and Devices in a build without cgo, outside Windows.
 var (
 	ErrNoLive     = errors.New("capture: live capture needs cgo on this platform")
 	errNotCapture = errors.New("not a pcap or pcapng file")
 )
 
+// Device is a device that can be captured live.
 type Device struct {
 	Name        string
 	Description string
@@ -40,7 +41,7 @@ type packet struct {
 	data     []byte // the container's buffer, until the next call
 }
 
-// NewReader takes pcap or pcapng, whichever r starts with.
+// NewReader returns a Reader for the pcap or pcapng capture that r holds.
 func NewReader(r io.Reader) (*Reader, error) {
 	c, err := newContainer(r)
 	if err != nil {
@@ -61,6 +62,8 @@ func newContainer(r io.Reader) (container, error) {
 	return newClassic(br)
 }
 
+// ReadSegment returns the next TCP segment in the capture, skipping other packets, or io.EOF at
+// the end.
 func (r *Reader) ReadSegment() (wire.Segment, error) {
 	for {
 		p, err := r.c.next()
@@ -83,6 +86,7 @@ type File struct {
 	f *os.File
 }
 
+// Open opens a pcap or pcapng file.
 func Open(name string) (*File, error) {
 	f, err := os.Open(name)
 	if err != nil {

@@ -7,19 +7,20 @@ import (
 	"time"
 )
 
+// Flags describe a frame: its direction, and how it was found.
 type Flags uint32
 
 const (
 	FromServer Flags = 1 << iota // sent by the locked server
 	FromClient                   // sent by its client
-	WasLZ4                       // the body was compressed with LZ4
-	WasBundled                   // the body was bundled
-	Resynced                     // the first frame after skipped or lost bytes
+	WasLZ4                       // it was compressed with LZ4
+	WasBundled                   // it came out of a bundle
+	Resynced                     // it is the first frame after skipped or lost bytes
 )
 
 var flagNames = [...]string{"server", "client", "lz4", "bundled", "resynced"}
 
-// Frame is one game frame. Its Payload is a copy the caller owns.
+// Frame is one game frame. Its Payload is a copy that the caller owns.
 type Frame struct {
 	Time     time.Time
 	Src, Dst netip.AddrPort

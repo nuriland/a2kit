@@ -13,7 +13,7 @@ import (
 	"github.com/nuriland/a2kit/wire"
 )
 
-// Flags libpcap sets on a device
+// Flags libpcap sets on a device.
 const (
 	ifLoopback     = 0x1
 	ifUp           = 0x2
@@ -21,7 +21,7 @@ const (
 	ifDisconnected = 0x20
 )
 
-// bufferSize is the kernel's, big enough that a download does not make it drop the game.
+// bufferSize is the kernel buffer of a live capture.
 const bufferSize = 16 << 20
 
 // Live captures a device's TCP through libpcap, or Npcap on Windows.
@@ -87,8 +87,8 @@ func (l *Live) ReadSegment() (wire.Segment, error) {
 	}
 }
 
-// Record writes every packet the capture reads from now on to w as well, as a
-// pcap file: all the TCP the device sees, not only the game's.
+// Record also writes every packet read from now on to w, as a pcap file. That is all the TCP the
+// device sees, not only the game's.
 func (l *Live) Record(w io.Writer) error {
 	rec, err := newRecorder(w, fileLinkType(l.link))
 	if err != nil {
@@ -98,8 +98,8 @@ func (l *Live) Record(w io.Writer) error {
 	return nil
 }
 
-// fileLinkType: a live handle numbers raw IP the way its OS does, 12 or 14,
-// where a file says 101. The other link types agree.
+// fileLinkType returns the link type a file uses for dlt. A live handle numbers raw IP as its OS
+// does, 12 or 14, where a file uses 101.
 func fileLinkType(dlt int) int {
 	if dlt == 12 || dlt == 14 {
 		return 101
@@ -107,12 +107,14 @@ func fileLinkType(dlt int) int {
 	return dlt
 }
 
-// Close may be called from any goroutine.
+// Close ends the capture, and may be called from any goroutine.
 func (l *Live) Close() error {
 	l.h.Close()
 	return nil
 }
 
+// defaultDevice returns the first device that is up, has an address, is not a loopback, and is not
+// known to be disconnected.
 func defaultDevice() (string, error) {
 	ifs, err := pcap.FindAllDevs()
 	if err != nil {
@@ -126,6 +128,7 @@ func defaultDevice() (string, error) {
 	return "", errors.New("capture: no device is up")
 }
 
+// Devices lists the devices that can be captured.
 func Devices() ([]Device, error) {
 	ifs, err := pcap.FindAllDevs()
 	if err != nil {

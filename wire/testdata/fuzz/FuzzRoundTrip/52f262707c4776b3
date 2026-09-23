@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("2100\x000000")
+byte('è')
+bool(false)

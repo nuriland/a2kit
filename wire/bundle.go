@@ -8,18 +8,16 @@ import (
 )
 
 const (
-	maxDepth  = 4       // maximum number of nesting levels
-	maxPlain  = 8000000 // plaintext, all levels together
-	minBundle = 7       // FF FF, the size, and a block of at least a byte
-	maxGrowth = 255     // the most LZ4 can grow a block: a byte of match length says 255 more
+	maxDepth  = 4       // nesting levels
+	maxPlain  = 8000000 // plaintext across all nesting levels
+	minBundle = 7       // FF FF, a u32 size, and a block of at least one byte
+	maxGrowth = 255     // the largest ratio of LZ4 output to input
 )
 
-// unwrap opens FF FF | u32le size | lz4 block and parses the frames inside.
-// It reports whether the block held exactly size bytes.
-//
-// Plaintext goes on a stack, so maxPlain bounds every level at once.
-// When the stack grows it moves, and a parent mid-walk still has its bytes where they were.
-// A size the block could never give is garbage, and is refused before anything is allocated for it.
+// unwrap decompresses FF FF | u32le size | lz4 block and parses the frames inside. It reports
+// whether the block decompressed to exactly size bytes. The plaintext of every nesting level
+// shares one stack, bounded by maxPlain; a parent's slice stays valid if the stack is
+// reallocated. A size the block cannot produce is refused before anything is allocated.
 func (f *framer) unwrap(body []byte, depth int, flags Flags) bool {
 	var size uint32
 	if len(body) >= minBundle {

@@ -26,8 +26,8 @@ func feed(d *Decoder, p []byte) {
 	d.Feed(epoch, srv, cli, p)
 }
 
-// frames prints the frames found so far, a line each. It leaves out their direction: that is
-// the lock's to give, and only the tests of the lock look at it, through framesDir.
+// frames prints the frames found so far, a line each, without their direction. framesDir
+// includes it.
 func frames(d *Decoder) string { return printed(d, FromServer|FromClient) }
 
 func framesDir(d *Decoder) string { return printed(d, 0) }
@@ -98,18 +98,24 @@ func TestFrameString(t *testing.T) {
 
 func TestShapes(t *testing.T) {
 	d := NewDecoder(Config{})
-	feed(d, slices.Concat(wiretest.AppendFrame(nil, 0x05, 0x38, 300), []byte{0, 0}, wiretest.AppendFrame(nil, 0x12, 0x34, 3)))
-	expect(t, d, "05 38 len=300 -\n12 34 len=3 -\n")
+	feed(d, slices.Concat(
+		wiretest.AppendFrame(nil, 0x00, 0x36, 8), // a frame behind it, so a stream takes it at the start
+		wiretest.AppendFrame(nil, 0x05, 0x38, 300),
+		[]byte{0, 0},
+		wiretest.AppendFrame(nil, 0x12, 0x34, 3),
+	))
+	expect(t, d, "00 36 len=8 -\n05 38 len=300 -\n12 34 len=3 -\n")
 }
 
 func TestKnownOnly(t *testing.T) {
 	d := NewDecoder(Config{KnownOnly: true})
 	feed(d, slices.Concat(
+		wiretest.AppendFrame(nil, 0x00, 0x36, 8), // a known frame behind it, so the start is taken
 		wiretest.AppendFrame(nil, 0x04, 0x38, 5),
 		wiretest.AppendFrame(nil, 0x12, 0x34, 3),
 		wiretest.AppendFrame(nil, 0x33, 0x36, 7),
 	))
-	expect(t, d, "04 38 len=5 -\n33 36 len=7 -\n")
+	expect(t, d, "00 36 len=8 -\n04 38 len=5 -\n33 36 len=7 -\n")
 }
 
 func TestResync(t *testing.T) {
@@ -133,14 +139,23 @@ func TestProbation(t *testing.T) {
 	expect(t, d, "04 38 len=5 resynced\n05 38 len=9 resynced\n33 36 len=4 -\n")
 }
 
+// At the start, envelopes take three headers in a row to believe; after a frame, one.
 func TestEnvelopes(t *testing.T) {
 	d := NewDecoder(Config{})
 	f := wiretest.AppendFrame(nil, 0x04, 0x38, 20)
-	feed(d, slices.Concat([]byte{byte(len(f)), 0, 0, 0}, f))
+	feed(d, slices.Concat(enveloped(f, len(f)), enveloped(f, len(f)), enveloped(f, len(f))))
 	st := d.streams[key{src: srv, dst: cli}]
 	if !st.fr.env.on {
-		t.Fatal("envelopes not found")
+		t.Fatal("envelopes not found at the start")
 	}
+	expect(t, d, strings.Repeat("04 38 len=20 -\n", 3))
+
+	after := NewDecoder(Config{})
+	feed(after, slices.Concat(wiretest.AppendFrame(nil, 0x00, 0x36, 8), enveloped(f, len(f))))
+	if !after.streams[key{src: srv, dst: cli}].fr.env.on {
+		t.Fatal("envelopes not found after a frame")
+	}
+	expect(t, after, "00 36 len=8 -\n04 38 len=20 -\n")
 
 	feed(d, []byte{0xFF, 0xFF}) // half the next header
 	feed(d, slices.Concat(
@@ -148,7 +163,7 @@ func TestEnvelopes(t *testing.T) {
 		wiretest.AppendFrame(nil, 0x05, 0x38, 9),
 		wiretest.AppendFrame(nil, 0x33, 0x36, 4), // unaligned again, 05 38 is trusted for the frame behind it
 	))
-	expect(t, d, "04 38 len=20 -\n05 38 len=9 resynced\n33 36 len=4 -\n")
+	expect(t, d, "05 38 len=9 resynced\n33 36 len=4 -\n")
 	if st.fr.env.on {
 		t.Error("envelopes still on")
 	}
@@ -258,8 +273,7 @@ func TestLock(t *testing.T) {
 	expectDir(t, d, "04 38 len=10 -\n05 38 len=10 server\n05 38 len=6 server\n")
 }
 
-// Busy streams throw up frames that parse. Two megabytes of noise, and of TLS records running
-// over segments, lock nothing, and the game locks when it comes.
+// Random bytes, and TLS records split across segments, do not lock; the game's stream does.
 func TestLockNoise(t *testing.T) {
 	var (
 		d     = NewDecoder(Config{})
@@ -288,7 +302,7 @@ func TestLockNoise(t *testing.T) {
 	expectDir(t, d, "00 36 len=2 -\n04 38 len=10 server\n05 38 len=10 server\n")
 }
 
-// The game's server closes, and the client goes on to another: the lock goes with the first.
+// The lock ends when its server's stream closes, and the next server locks.
 func TestLockHandover(t *testing.T) {
 	var (
 		d    = NewDecoder(Config{})
@@ -329,8 +343,8 @@ func TestLockIdle(t *testing.T) {
 	expectDir(t, d, "04 38 len=10 -\n05 38 len=10 server\n")
 }
 
-// A game segment that happens to start like TLS is skipped while hunting, and what the framer
-// had goes with it rather than being joined onto what comes after. The lock's pair is parsed whole.
+// A game segment that starts like a TLS record is skipped while hunting, and the partial frame
+// before it is dropped. On the locked pair it is parsed.
 func TestTLSLookalike(t *testing.T) {
 	a := wiretest.AppendFrame(nil, 0x04, 0x38, 41)
 	copy(a[20:], []byte{0x16, 0x03, 0x01, 0x00, 0x05})
@@ -355,7 +369,7 @@ func TestTLSLookalike(t *testing.T) {
 	}
 }
 
-// plausible takes a family for a known opcode, so every known opcode must be in one.
+// Every known opcode is in a family, which plausible relies on.
 func TestKnownInFamilies(t *testing.T) {
 	for _, op := range known {
 		if !inFamily(byte(op >> 8)) {
@@ -386,11 +400,11 @@ func BenchmarkFeed(b *testing.B) {
 	}
 }
 
-// bodies returns n frames, and each one's body, the opcode and payload.
-func bodies(n int) (stream []byte, want []string) {
+// bodies returns n frames of opcode op 38, and each one's body, the opcode and payload.
+func bodies(n int, op byte) (stream []byte, want []string) {
 	for i := range n {
 		size := 10 + i%200
-		f := wiretest.AppendFrame(nil, 0x04, 0x38, size)
+		f := wiretest.AppendFrame(nil, op, 0x38, size)
 		stream = append(stream, f...)
 		want = append(want, string(f[len(f)-2-size:]))
 	}
@@ -399,11 +413,15 @@ func bodies(n int) (stream []byte, want []string) {
 
 // recovered counts the frames found that were sent, and those that were not.
 func recovered(d *Decoder, want []string) (found, bogus int) {
+	return count(slices.Collect(d.Frames()), want)
+}
+
+func count(fs []Frame, want []string) (found, bogus int) {
 	left := map[string]int{}
 	for _, w := range want {
 		left[w]++
 	}
-	for f := range d.Frames() {
+	for _, f := range fs {
 		op := f.Opcode.Bytes()
 		if k := string(op[:]) + string(f.Payload); left[k] > 0 {
 			left[k]--
@@ -427,11 +445,10 @@ func enveloped(p []byte, size int) []byte {
 	return b
 }
 
-// A segment lost inside an envelope's body is counted off. One that takes a header leaves the
-// stream looking for the headers again, and it goes on from them. Either way, what is lost is
-// what the bare stream loses.
+// A segment lost from an enveloped stream costs what it costs a bare one, whether it falls
+// inside a body or takes a header.
 func TestEnvelopeGap(t *testing.T) {
-	plain, want := bodies(3000)
+	plain, want := bodies(3000, 0x04)
 	decode := func(stream []byte) (found, bogus int) {
 		d := NewDecoder(Config{})
 		for i, seq := 0, 0; seq < len(stream); i++ {
@@ -453,11 +470,26 @@ func TestEnvelopeGap(t *testing.T) {
 	}
 }
 
-// Four bytes that looked like a header, then a gap, and no headers after: the envelopes were never
-// there. After maxBuf bytes the stream gives up on them, and parses what it holds.
-func TestEnvelopeGiveUp(t *testing.T) {
+// touched counts the frames of plain that the bytes from, to of stream cut into; plain begins at
+// offset at in stream.
+func touched(plain []byte, at, from, to int) (n int) {
+	for len(plain) > 0 {
+		v, w := binary.Uvarint(plain)
+		size := int(v) + w - 4
+		if at < to && at+size > from {
+			n++
+		}
+		at += size
+		plain = plain[size:]
+	}
+	return n
+}
+
+// A false header at the start, then a gap: no envelopes, and the frames held while undecided are
+// kept.
+func TestEnvelopeStartGap(t *testing.T) {
 	const from, to = 500, 1900 // the bytes lost
-	plain, want := bodies(12000)
+	plain, want := bodies(12000, 0x04)
 	stream := slices.Concat(binary.LittleEndian.AppendUint32(nil, 1000), plain)
 	d := NewDecoder(Config{})
 	d.FeedSegment(segment(1, ACK, stream[:from], 0))
@@ -465,25 +497,44 @@ func TestEnvelopeGiveUp(t *testing.T) {
 		d.FeedSegment(segment(1+uint32(seq), ACK, stream[seq:min(len(stream), seq+1400)], 1))
 	}
 	if st := d.streams[key{src: srv, dst: cli}]; st.fr.env.on {
-		t.Fatal("envelopes still on")
+		t.Fatal("envelopes on")
 	}
-
-	touched, off := 0, 4 // the frames the lost bytes cut into
-	for len(plain) > 0 {
-		v, w := binary.Uvarint(plain)
-		n := int(v) + w - 4
-		if off < to && off+n > from {
-			touched++
-		}
-		off += n
-		plain = plain[n:]
-	}
-	if found, bogus := recovered(d, want); found != len(want)-touched || bogus > 0 {
-		t.Errorf("%d of %d frames found, %d bogus; the gap cut into %d", found, len(want), bogus, touched)
+	cut := touched(plain, 4, from, to)
+	if found, bogus := recovered(d, want); found != len(want)-cut || bogus > 0 {
+		t.Errorf("%d of %d frames found, %d bogus; the gap cut into %d", found, len(want), bogus, cut)
 	}
 }
 
-// While hunting, every TCP byte on the machine goes through the framer, most of it noise.
+func TestEnvelopeGiveUp(t *testing.T) {
+	var (
+		tick       = wiretest.AppendFrame(nil, 0x00, 0x36, 8)
+		first, _   = bodies(30, 0x05) // apart from the rest, which alone is counted
+		rest, want = bodies(12000, 0x04)
+		env        = enveloped(first, 400)
+		stream     = slices.Concat(tick, env, rest)
+		from, to   = len(tick) + 600, len(tick) + len(env) + 50 // lost: the last header, and the envelopes' end
+		d          = NewDecoder(Config{})
+	)
+	d.FeedSegment(segment(1, ACK, stream[:from], 0))
+	for seq := to; seq < len(stream); seq += 1400 {
+		d.FeedSegment(segment(1+uint32(seq), ACK, stream[seq:min(len(stream), seq+1400)], 1))
+	}
+	d.Flush()
+	if st := d.streams[key{src: srv, dst: cli}]; st.fr.env.on {
+		t.Fatal("envelopes still on")
+	}
+	var restFrames []Frame
+	for f := range d.Frames() {
+		if f.Opcode == 0x3804 {
+			restFrames = append(restFrames, f)
+		}
+	}
+	cut := touched(rest, len(tick)+len(env), from, to)
+	if found, bogus := count(restFrames, want); found != len(want)-cut || bogus > 0 {
+		t.Errorf("%d of %d frames found, %d bogus; the gap cut into %d", found, len(want), bogus, cut)
+	}
+}
+
 func BenchmarkNoise(b *testing.B) {
 	p := make([]byte, 1<<20)
 	rand.NewChaCha8([32]byte{1}).Read(p)

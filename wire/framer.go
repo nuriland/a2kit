@@ -6,45 +6,44 @@ import (
 )
 
 const (
-	maxFrame        = 1 << 20 // a frame on the wire, varint and all
-	maxBuf          = 1 << 20 // what a stream holds while it looks for frames
-	probationFrames = 2       // frames after a resync still held to the untrusted rules
-
-	// stallLimit is the biggest frame an untrusted stream waits for. Below it, garbage
-	// read as a length is common and cheap to wait on. Above it, where a length takes a
-	// third varint byte, garbage is rare but can hold the stream for a megabyte.
-	stallLimit = 1 << 14
+	maxFrame        = 1 << 20 // the longest frame, varint included
+	maxBuf          = 1 << 20 // the most a stream buffers
+	probationFrames = 2       // frames after a resync that still get the untrusted rules
+	stallLimit      = 1 << 14 // the longest incomplete frame an untrusted stream waits for
 )
 
-// verdict is what the bytes so far say
+// verdict answers a question that the bytes so far may not settle.
 type verdict int
 
 const (
 	no    verdict = -1
-	maybe verdict = 0 // need more bytes
+	maybe verdict = 0 // more bytes are needed
 	yes   verdict = 1
 )
 
-// framer cuts one stream's bytes into frame bodies, and hands each to emit.
+// framer splits one stream's bytes into frame bodies and passes each to emit.
 type framer struct {
 	knownOnly bool
 	log       *slog.Logger
 	emit      func(body []byte, flags Flags)
 
-	buf       []byte    // not parsed yet
+	buf       []byte    // bytes not parsed yet
+	begun     bool      // a frame has been taken or bytes skipped
+	over      bool      // no more bytes will arrive
 	aligned   bool      // the last bytes parsed were a frame
 	probation int       // frames left before the stream is trusted again
-	skipped   int       // bytes passed over since the last frame
-	resync    bool      // flag the next frame Resynced
-	plain     []byte    // bundle plaintext, a stack for nesting
-	env       envelopes // envelopes around frames
+	skipped   int       // bytes skipped since the last frame
+	resync    bool      // the next frame is flagged Resynced
+	plain     []byte    // bundle plaintext, a stack shared by nesting levels
+	env       envelopes // envelope state
 
-	// resume's work on the frame buf[0] waits on, kept from one write to the next
-	waiting bool  // the last pump stopped on it
-	scanned int   // offsets looked at
-	pending []int // those that more bytes may yet make two frames of
+	// resume's progress on the frame at buf[0], kept between writes
+	waiting bool  // the last pump stopped waiting on that frame
+	scanned int   // offsets checked
+	pending []int // offsets that more bytes may still make two frames of
 }
 
+// write appends p to the stream and parses what it can.
 func (f *framer) write(p []byte) {
 	for len(p) > 0 {
 		if len(f.buf) >= maxBuf {
@@ -70,37 +69,77 @@ func (f *framer) write(p []byte) {
 	}
 }
 
-// lose says n bytes of the stream will never come. What the framer holds no longer lines up
-// with what does, so it goes too.
+// lose records that the next n bytes of the stream will never arrive. The buffered bytes no
+// longer line up with what follows and are dropped, after any bytes held for the envelope check
+// at the start are parsed.
 func (f *framer) lose(n int) {
+	f.settle()
 	f.skipped += len(f.buf) + n
 	f.buf = f.buf[:0]
-	f.aligned, f.waiting = false, false
+	f.begun, f.aligned, f.waiting = true, false, false
 	if f.env.on {
 		f.env.skip(n)
 	}
 }
 
-// trusted is whether the stream is aligned and probation is over.
+// settle decides that no envelopes begin at the start of the stream, and parses the bytes held
+// while that was undecided.
+func (f *framer) settle() {
+	if !f.begun {
+		f.begun = true
+		f.pump()
+	}
+}
+
+// end records that no more bytes will arrive. Undecided envelope checks resolve to no, a search
+// for lost envelope headers is abandoned, and what the framer holds is parsed.
+func (f *framer) end() {
+	f.over, f.begun = true, true
+	if f.env.lost {
+		f.log.Warn("envelopes lost")
+		f.env = envelopes{}
+	}
+	f.pump()
+}
+
+// trusted reports whether the stream is aligned and off probation.
 func (f *framer) trusted() bool { return f.aligned && f.probation == 0 }
 
-// pump parses what it can, and keeps the rest for later bytes to finish.
+// pump parses every frame the buffer holds and keeps the remainder for later writes.
 func (f *framer) pump() {
 	var (
 		off  = 0
-		kept = f.waiting // resume's work stands while the frame at 0 is the one it waited on
+		kept = f.waiting // resume's progress holds while buf[0] is the frame it waited on
 	)
 	f.waiting = false
 
 loop:
 	for off < len(f.buf) {
 		p := f.buf[off:]
-		if p[0] == 0 && (f.aligned || f.env.on || f.envelope(p) == no) {
-			off++ // padding, unless it starts a header: a length of 1024 is 00 04 00 00
+		// Envelopes can begin only where a frame could: after a frame, or at the start.
+		if !f.env.on && (f.aligned || !f.begun) {
+			switch f.envelope(p, f.aligned) {
+			case yes:
+				f.log.Info("envelopes found")
+				f.env.on = true
+				f.strip(off)
+				kept = false // the bytes at off have changed
+				continue
+			case maybe:
+				if !f.over {
+					break loop // wait for the bytes that decide it
+				}
+			}
+		}
+		if p[0] == 0 {
+			off++ // padding
 			continue
 		}
 
 		n, head := f.frameLen(p, f.trusted())
+		if n > 0 && !f.aligned && f.follows(p[n:]) == no {
+			n = -1 // nothing follows it
+		}
 		switch {
 		case n > 0:
 			if f.skipped > 0 {
@@ -109,7 +148,7 @@ loop:
 			} else if f.probation > 0 {
 				f.probation--
 			}
-			f.aligned = true
+			f.begun, f.aligned = true, true
 			f.parse(p[head:n], 0, 0)
 			off += n
 
@@ -122,23 +161,12 @@ loop:
 				f.waiting = !f.aligned
 				break loop // wait for the rest
 			}
+			f.begun = true
 			f.skipped += skip
 			off += skip
 
 		default:
-			if !f.aligned && !f.env.on {
-				switch f.envelope(p) {
-				case maybe:
-					break loop
-				case yes:
-					f.log.Info("envelopes found")
-					f.env.on = true
-					f.strip(off)
-					kept = false // the bytes at off are not what they were
-					continue
-				}
-			}
-			f.aligned = false // garbage
+			f.begun, f.aligned = true, false // garbage
 			f.skipped++
 			off++
 		}
@@ -146,9 +174,9 @@ loop:
 	f.buf = f.buf[:copy(f.buf, f.buf[off:])]
 }
 
-// frameLen returns the length of the frame at p, varint and all, and the varint's width.
-// The length is 0 to wait for more bytes, and -1 if p is not a frame.
-// Untrusted, it wants a plausible opcode, and won't wait on a frame over stallLimit bytes.
+// frameLen returns the length of the frame at p, varint included, and the varint's width. The
+// length is 0 if more bytes are needed and -1 if p does not start a frame. Without trust, the
+// opcode must be plausible, and an incomplete frame longer than stallLimit is rejected.
 func (f *framer) frameLen(p []byte, trust bool) (n, head int) {
 	v, head := uvarint(p)
 	switch {
@@ -165,13 +193,13 @@ func (f *framer) frameLen(p []byte, trust bool) (n, head int) {
 
 	if !trust {
 		if len(p) < head+2 {
-			return 0, head // the opcode is not here yet
+			return 0, head // the opcode has not arrived
 		}
 		if !f.plausible(p[head:], n-head) {
 			return -1, 0
 		}
 		if n > len(p) && n > stallLimit {
-			return -1, 0 // too big to wait for on a guess
+			return -1, 0 // too long to wait for
 		}
 	}
 	if n > len(p) {
@@ -180,7 +208,8 @@ func (f *framer) frameLen(p []byte, trust bool) (n, head int) {
 	return n, head
 }
 
-// plausible judges a body by its first two or three bytes, and the size its frame gives it.
+// plausible reports whether b, the start of a body of the given size, could begin a real frame:
+// a bundle, a known opcode, or, unless knownOnly, an opcode in a family.
 func (f *framer) plausible(b []byte, size int) bool {
 	switch {
 	case b[0] == 0xFF && b[1] == 0xFF:
@@ -194,7 +223,7 @@ func (f *framer) plausible(b []byte, size int) bool {
 	return inFamily(b[1])
 }
 
-// starts is whether an untrusted stream would take a frame at p, whole or not.
+// starts reports whether an untrusted stream would accept a frame at p, complete or not.
 func (f *framer) starts(p []byte) verdict {
 	n, head := f.frameLen(p, false)
 	switch {
@@ -206,13 +235,10 @@ func (f *framer) starts(p []byte) verdict {
 	return yes
 }
 
-// resume serves an unaligned stream waiting on a frame that may be garbage. It looks ahead for
-// two whole frames in a row, and returns the offset of the first, or 0 to keep waiting. A whole
-// frame and the start of another turn up every few thousand offsets of random bytes, often
-// inside the frame waited on, so the second must be whole too.
-//
-// The wait is on nothing past stallLimit, so an offset that fails now fails until the wait ends.
-// With kept, the offsets looked at before are not looked at again, only those still pending.
+// resume is called while an unaligned stream waits for an incomplete frame that may be garbage.
+// It returns the first offset further on where two complete frames follow each other, or 0 to
+// keep waiting. An offset that fails cannot pass later in the same wait, since p stays shorter
+// than stallLimit, so with kept only the pending offsets and the new bytes are checked.
 func (f *framer) resume(p []byte, kept bool) int {
 	if !kept {
 		f.scanned, f.pending = 0, f.pending[:0]
@@ -238,7 +264,7 @@ func (f *framer) resume(p []byte, kept bool) int {
 	return 0
 }
 
-// pair is whether p holds two whole frames in a row at i, by the untrusted rules.
+// pair reports whether p holds two complete frames in a row at i, under the untrusted rules.
 func (f *framer) pair(p []byte, i int) verdict {
 	n, _ := f.frameLen(p[i:], false)
 	switch {
@@ -260,11 +286,42 @@ func (f *framer) pair(p []byte, i int) verdict {
 	return yes
 }
 
-// parse opens bundles and emits everything else. A flagged bundle that won't open is emitted as it is
+// follows reports whether a plausible frame or an envelope begins at p, after any padding. An
+// unaligned stream accepts a frame only if one does.
+func (f *framer) follows(p []byte) verdict {
+	if !f.env.on {
+		if v := f.envelope(p, true); v != no {
+			return v
+		}
+	}
+	for len(p) > 0 && p[0] == 0 {
+		p = p[1:]
+	}
+	return f.begins(p)
+}
+
+// begins reports whether a plausible frame begins at p, whatever its length.
+func (f *framer) begins(p []byte) verdict {
+	v, head := uvarint(p)
+	switch {
+	case head == 0:
+		return maybe
+	case head < 0, v < 6, int(v)+head-4 > maxFrame:
+		return no
+	case len(p) < head+2:
+		return maybe
+	case f.plausible(p[head:], int(v)-4):
+		return yes
+	}
+	return no
+}
+
+// parse unwraps bundles and emits every other body. A flagged bundle that fails to unwrap is
+// emitted as a frame.
 func (f *framer) parse(body []byte, depth int, flags Flags) {
 	switch {
 	case body[0] == 0xFF && body[1] == 0xFF:
-		f.unwrap(body, depth, flags) // dropped if it will not open
+		f.unwrap(body, depth, flags) // dropped if it fails
 		return
 	case len(body) > minBundle && body[0] >= 0xF0 && body[0] < 0xFF && body[1] == 0xFF && body[2] == 0xFF:
 		if f.unwrap(body[1:], depth, flags) {
@@ -278,7 +335,7 @@ func (f *framer) parse(body []byte, depth int, flags Flags) {
 	f.emit(body, flags)
 }
 
-// walk parses a bundle's plaintext. Nothing more will come, so it stops at the first bytes that are not a whole frame.
+// walk parses a bundle's plaintext, stopping at the first bytes that are not a complete frame.
 func (f *framer) walk(p []byte, depth int, flags Flags) {
 	for len(p) > 0 {
 		if p[0] == 0 {

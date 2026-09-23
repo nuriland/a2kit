@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/nuriland/a2kit/internal/wiretest"
@@ -17,12 +18,27 @@ var (
 	cli = netip.MustParseAddrPort("10.0.0.1:10000")
 )
 
-// Opcodes the game sends often, and the families, as a stream draws them.
-var (
-	hints    = [...][2]byte{{0x04, 0x38}, {0x05, 0x38}, {0x02, 0x38}, {0x06, 0x38}, {0x22, 0x38}, {0x2A, 0x38}, {0x33, 0x36}, {0x00, 0x36}, {0x00, 0x8D}, {0x1B, 0x92}, {0x0D, 0x92}}
-	families = [...]byte{0x36, 0x38, 0x8D, 0x92, 0x96, 0x97}
-	small    = [...]int{0, 1, 2, 5, 12, 41, 200, 300}
-)
+// mix gives each family's share of frames, as in real traffic, and in three families the share of their commonest opcode
+var mix = [...]family{
+	{0x38, 0.455, 0x04, 0.34},
+	{0x36, 0.261, 0x00, 0.89},
+	{0x37, 0.173, 0, 0},
+	{0x8D, 0.053, 0x00, 0.86},
+	{0x92, 0.021, 0, 0},
+	{0x96, 0.014, 0, 0},
+	{0x56, 0.011, 0, 0},
+	{0x8A, 0.005, 0, 0},
+	{0x97, 0.001, 0, 0},
+}
+
+type family struct {
+	high   byte
+	share  float64
+	common byte    // the low byte of the family's commonest opcode
+	often  float64 // and its share of the family
+}
+
+var small = [...]int{0, 1, 2, 5, 12, 41, 200, 300}
 
 // A corpus is captures of one server stream each, damaged the way captures are.
 type corpus struct {
@@ -91,7 +107,7 @@ func (s *sampler) piece(b []byte) []byte {
 	return append(b, make([]byte, 1+s.r.IntN(2))...)
 }
 
-// bigSize is log-uniform from 1 to 512 KiB, so that no size is favored over another.
+// bigSize is log-uniform from 1 to 512 KiB.
 func (s *sampler) bigSize() int {
 	return int(1024 * math.Exp(s.r.Float64()*math.Log(512)))
 }
@@ -116,24 +132,30 @@ func (s *sampler) bundle(b []byte, depth int) []byte {
 	return wiretest.AppendBundle(b, plain)
 }
 
-// frame appends a frame with size bytes of random payload, its opcode known six times in ten,
-// of a family most of the rest, and anything else otherwise.
-func (s *sampler) frame(b []byte, size int) []byte {
-	var op0, op1 byte
-	for {
-		switch c := s.r.Float64(); {
-		case c < 0.6:
-			h := hints[s.r.IntN(len(hints))]
-			op0, op1 = h[0], h[1]
-		case c < 0.85:
-			op0, op1 = byte(s.r.Uint32()), families[s.r.IntN(len(families))]
-		default:
-			op0, op1 = byte(s.r.Uint32()), byte(s.r.Uint32())
+// opcode draws a family as real frames have them, and then the family's commonest opcode, or
+// any other.
+func (s *sampler) opcode() (op0, op1 byte) {
+	c := s.r.Float64()
+	for _, m := range mix {
+		if c < m.share {
+			if s.r.Float64() < m.often {
+				return m.common, m.high
+			}
+			return byte(s.r.Uint32()), m.high
 		}
-		if op1 != 0xFF { // FF there begins a bundle
-			break
+		c -= m.share
+	}
+	for {
+		op1 = byte(s.r.Uint32())
+		if op1 != 0xFF && !slices.ContainsFunc(mix[:], func(m family) bool { return m.high == op1 }) { // FF there begins a bundle
+			return byte(s.r.Uint32()), op1
 		}
 	}
+}
+
+// frame appends a frame with size bytes of random payload.
+func (s *sampler) frame(b []byte, size int) []byte {
+	op0, op1 := s.opcode()
 	payload := make([]byte, size)
 	for i := 0; i < size; i += 8 {
 		var w [8]byte
@@ -187,7 +209,7 @@ func (s *sampler) capture(b []byte) []byte {
 }
 
 // feed gives b to d in pieces of up to 40 or up to 4000 bytes, and sends one piece in sixteen
-// the other way, so that the server's stream loses it with nothing to say so.
+// the other way, where the server's stream loses it without a sequence number to show it.
 func (s *sampler) feed(d *wire.Decoder, b []byte) {
 	t := time.Unix(1700000000, 0)
 	for len(b) > 0 {

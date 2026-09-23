@@ -2,8 +2,9 @@ package wire
 
 import "time"
 
-// admit is whether bytes on k get parsed. While locked, only the pair's do, and they keep the lock alive.
-// The lock ends when its server's stream closes, or when it has been quiet for LockIdle.
+// admit reports whether bytes on k are parsed. While locked, only the pair is admitted, and its
+// traffic keeps the lock alive. The lock ends when the server's stream closes, or after LockIdle
+// of silence.
 func (d *Decoder) admit(k key, t time.Time) bool {
 	d.sweep(t)
 	if d.srv == nil {
@@ -24,11 +25,9 @@ func (d *Decoder) admit(k key, t time.Time) bool {
 	return false
 }
 
-// lockFrame counts a frame toward the lock, and returns its direction.
-//
-// Any busy stream throws up frames that parse, so only known opcodes count, only once the
-// stream is past probation, and a resync starts the count over. Three lock, or a combat
-// opcode after one. Combat from the client side means the pair was taken backwards.
+// lockFrame counts a frame toward the lock and returns the stream's direction. Only known
+// opcodes count, on a stream off probation, and a resync resets the count. Three lock, as does a
+// combat opcode after one. A combat opcode from the client side reverses the pair.
 func (d *Decoder) lockFrame(st *stream, op Opcode, flags Flags) Flags {
 	if flags&Resynced != 0 {
 		st.frames = 0
@@ -48,7 +47,7 @@ func (d *Decoder) lockFrame(st *stream, op Opcode, flags Flags) Flags {
 	return st.dir
 }
 
-// lock drops every stream outside the pair, as they are ignored from now on.
+// lock makes st the server side and its reverse the client, and drops every other stream.
 func (d *Decoder) lock(st *stream, why string) {
 	peer := d.streams[st.key.reverse()]
 	d.srv, d.lockAt = st, st.last
@@ -64,6 +63,7 @@ func (d *Decoder) lock(st *stream, why string) {
 	d.l.Info("flow locked", "src", st.key.src, "dst", st.key.dst, "why", why)
 }
 
+// unlock returns the decoder to hunting.
 func (d *Decoder) unlock() {
 	d.srv = nil
 	for _, st := range d.streams {

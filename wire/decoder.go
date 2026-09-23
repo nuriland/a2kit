@@ -9,16 +9,17 @@ import (
 	"time"
 )
 
+// Config configures a Decoder. The zero Config is ready to use.
 type Config struct {
 	EmitClient bool          // keep the client side's frames, default false
-	KnownOnly  bool          // keep only known opcodes, and hunt by them alone, default false
+	KnownOnly  bool          // keep only known opcodes, and take no others as plausible, default false
 	ParseTLS   bool          // parse segments that start like TLS records, default false
 	LockIdle   time.Duration // the silence that ends the lock, default 60s
 	Logger     *slog.Logger  // resyncs, locks and lost gaps, default silent
 }
 
-// Decoder turns TCP segments into frames, and keeps them until taken. It is
-// not safe for concurrent use.
+// Decoder turns TCP segments into frames, and keeps them until they are taken. It is not safe
+// for concurrent use.
 type Decoder struct {
 	c Config
 	l *slog.Logger
@@ -31,6 +32,7 @@ type Decoder struct {
 	queue   []Frame         // frames to yield
 }
 
+// NewDecoder returns a Decoder configured by config.
 func NewDecoder(config Config) *Decoder {
 	if config.LockIdle <= 0 {
 		config.LockIdle = 60 * time.Second
@@ -42,8 +44,8 @@ func NewDecoder(config Config) *Decoder {
 	return &Decoder{c: config, l: log, streams: make(map[key]*stream)}
 }
 
-// Feed takes a segment's payload with no sequence number to place it by, so
-// each direction's payloads must come in order.
+// Feed adds a payload that has no sequence number. Each direction's payloads must be fed in
+// order.
 func (d *Decoder) Feed(t time.Time, src, dst netip.AddrPort, payload []byte) {
 	if len(payload) == 0 {
 		return
@@ -57,8 +59,8 @@ func (d *Decoder) Feed(t time.Time, src, dst netip.AddrPort, payload []byte) {
 	d.take(st, payload, t)
 }
 
-// FeedSegment places a segment by its sequence number. Old bytes are dropped, and early ones
-// held until the gap before them fills or is given up.
+// FeedSegment adds a segment, placed by its sequence number. Old bytes are discarded, and bytes
+// past a gap are held until the gap fills or is given up.
 func (d *Decoder) FeedSegment(s Segment) {
 	k := key{s.Src, s.Dst, s.IfIndex}
 	if !d.admit(k, s.Time) {
@@ -92,7 +94,7 @@ func (d *Decoder) FeedSegment(s Segment) {
 	}
 }
 
-// Frames yields the frames found so far, oldest first, and forgets them.
+// Frames yields the frames found so far, oldest first, and removes them.
 func (d *Decoder) Frames() iter.Seq[Frame] {
 	return func(yield func(Frame) bool) {
 		for d.head < len(d.queue) {
@@ -107,9 +109,8 @@ func (d *Decoder) Frames() iter.Seq[Frame] {
 	}
 }
 
-// Decode reads r to its end, and yields frames as its segments complete them.
-// At the end it flushes, so nothing waits on a gap that can no longer fill.
-// A read error other than io.EOF is yielded last.
+// Decode reads r to its end and yields frames as its segments complete them. It calls Flush
+// when r ends. A read error other than io.EOF is yielded last.
 func (d *Decoder) Decode(r SegmentReader) iter.Seq2[Frame, error] {
 	return func(yield func(Frame, error) bool) {
 		drain := func() bool {
@@ -134,7 +135,7 @@ func (d *Decoder) Decode(r SegmentReader) iter.Seq2[Frame, error] {
 	}
 }
 
-// emit copies the payload: the body is in a stream buffer or bundle plaintext, and both are reused.
+// emit queues a frame. The payload is copied, since body points into a buffer that is reused.
 func (d *Decoder) emit(st *stream, body []byte, flags Flags) {
 	op := Opcode(body[0]) | Opcode(body[1])<<8
 	flags |= d.lockFrame(st, op, flags)

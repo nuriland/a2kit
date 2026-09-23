@@ -81,8 +81,8 @@ func TestBrokenBundle(t *testing.T) {
 	}
 }
 
-// A size the block could never give is refused before anything is allocated for it, and a
-// block that does compress that well still opens.
+// A size the block cannot produce is refused without allocating, and a block that compresses
+// that well still opens.
 func TestBundleSize(t *testing.T) {
 	d := NewDecoder(Config{})
 	feed(d, []byte{0x0D, 0xFF, 0xFF, 0x00, 0x00, 0x7A, 0x00, 1, 2, 3, 4, 5, 6}) // 8 MB, from a 3-byte block
@@ -98,13 +98,14 @@ func TestBundleSize(t *testing.T) {
 	t.Logf("%d bytes from a %d-byte block, %.0f times", len(zeros), len(b)-9, float64(len(zeros))/float64(len(b)-9))
 }
 
-// A body of FF FF too short to be a bundle is dropped, as a bundle that will not open is, and an
-// untrusted stream does not take it for one.
+// An FF FF body too short to be a bundle is dropped, and an untrusted stream does not take it for
+// one.
 func TestShortBundle(t *testing.T) {
 	short := []byte{0x07, 0xFF, 0xFF, 0x00}
 	d := NewDecoder(Config{})
-	feed(d, slices.Concat(wiretest.AppendFrame(nil, 0x00, 0x36, 2), short, wiretest.AppendFrame(nil, 0x05, 0x38, 1)))
-	expect(t, d, "00 36 len=2 -\n05 38 len=1 -\n")
+	tick := wiretest.AppendFrame(nil, 0x00, 0x36, 2)
+	feed(d, slices.Concat(tick, tick, short, wiretest.AppendFrame(nil, 0x05, 0x38, 1)))
+	expect(t, d, "00 36 len=2 -\n00 36 len=2 -\n05 38 len=1 -\n")
 
 	d = NewDecoder(Config{})
 	feed(d, slices.Concat(short, wiretest.AppendFrame(nil, 0x05, 0x38, 1)))

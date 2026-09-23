@@ -26,7 +26,8 @@ const (
 	ACK
 )
 
-// SegmentReader is a capture. It reads segments until io.EOF.
+// SegmentReader reads the TCP segments of a capture, in capture order. ReadSegment returns io.EOF
+// at the end.
 type SegmentReader interface {
 	ReadSegment() (Segment, error)
 }

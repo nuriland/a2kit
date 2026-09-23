@@ -186,8 +186,8 @@ func (in iface) time(hi, lo uint32) time.Time {
 	return time.Unix(int64(sec)+in.offset, int64(ns))
 }
 
-// packetBlock reads an enhanced packet block, or an obsolete one, which
-// differs only in a shorter interface id
+// packetBlock reads an enhanced packet block, or an obsolete one, which differs only in a
+// shorter interface id.
 func (n *pcapng) packetBlock(b []byte, obsolete bool) (packet, error) {
 	if len(b) < 20 {
 		return packet{}, errShort
@@ -214,8 +214,8 @@ func (n *pcapng) packetBlock(b []byte, obsolete bool) (packet, error) {
 	}, nil
 }
 
-// simpleBlock reads a simple packet block, which belongs to the first interface and has
-// no timestamp, so it gets the epoch, as libpcap gives it
+// simpleBlock reads a simple packet block. It belongs to the first interface and has no
+// timestamp, so it gets the epoch, as libpcap gives it.
 func (n *pcapng) simpleBlock(b []byte) (packet, error) {
 	if len(b) < 4 {
 		return packet{}, errShort

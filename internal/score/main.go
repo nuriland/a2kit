@@ -1,13 +1,16 @@
 // Score measures the decoder on synthesized captures whose frames are known: how many of them
-// it finds, and how many it makes up. A heuristic in package wire changes only with these
-// numbers, before and after.
+// it finds, and how many it makes up.
 //
 //	go run ./internal/score [-n 200] [-noise 30]
 //
 // Each corpus is captures of one server stream: small frames, bundles, padding, and a share of
-// big frames, with random payloads. A capture may start mid-stream, and loses one to three of
-// its segments and reorders others. Each is read twice: as a pcap, the way dump -pcap reads it,
-// and given to Feed in pieces, some sent the other way and so lost. The output is deterministic.
+// big frames, their opcodes drawn as real traffic has them, and their payloads random. A capture
+// may start mid-stream, and loses one to three of its segments and reorders others. Each is read
+// twice: as a pcap, the way dump -pcap reads it, and given to Feed in pieces, some sent the other
+// way and so lost. The output is deterministic.
+//
+// Random payloads make frames found by chance as likely as they can be, so it overstates what
+// plausibility costs.
 package main
 
 import (

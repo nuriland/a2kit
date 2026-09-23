@@ -10,13 +10,14 @@ import (
 )
 
 const (
-	maxStreams   = 64              // the most streams a decoder holds at once
+	maxStreams   = 64              // streams a decoder holds at once
 	maxHeld      = 64              // segments held past a gap
-	maxHeldBytes = 256 << 10       // and their bytes
-	maxGapWait   = time.Second     // how long a gap holds segments back; a retransmit comes sooner
-	closeGrace   = 2 * time.Second // after its FIN, a stream is dropped
+	maxHeldBytes = 256 << 10       // bytes held past a gap
+	maxGapWait   = time.Second     // how long a segment waits behind a gap
+	closeGrace   = 2 * time.Second // how long a closed stream is kept
 )
 
+// key identifies one direction of a connection.
 type key struct {
 	src, dst netip.AddrPort
 	ifIndex  int
@@ -28,17 +29,17 @@ func (k key) reverse() key { return key{k.dst, k.src, k.ifIndex} }
 type stream struct {
 	key    key
 	dir    Flags     // FromServer, FromClient, or 0 while hunting
-	last   time.Time // its newest bytes
-	at     time.Time // when the bytes being parsed were captured, for their frames
-	closed time.Time // its FIN or RST, and zero while open
+	last   time.Time // the time of its newest bytes
+	at     time.Time // the capture time of the bytes being parsed
+	closed time.Time // the time of its FIN or RST, zero while open
 	fr     framer
 	born   uint64
-	frames int // known frames since the last resync, toward the lock
+	frames int // frames counted toward the lock
 
 	// Reassembly, for FeedSegment.
 	synced    bool   // next is set
 	next      uint32 // the sequence number of the next byte in order
-	syn       uint32 // the sequence number after its SYN
+	syn       uint32 // the sequence number after its SYN, if one was seen
 	heldBytes int
 	held      []piece
 }
@@ -50,10 +51,11 @@ type piece struct {
 	data []byte
 }
 
-// after compares sequence numbers across wraparound
+// after reports whether sequence number a comes after b, allowing for wraparound.
 func after(a, b uint32) bool { return int32(a-b) > 0 }
 
-// hold keeps held in sequence order. It reports whether the segment is held, now or already held
+// hold inserts a segment into held, in sequence order. It reports whether the segment is held,
+// including when a copy of it already was.
 func (st *stream) hold(seq uint32, t time.Time, p []byte) bool {
 	i := len(st.held)
 	for i > 0 && after(st.held[i-1].seq, seq) {
@@ -70,7 +72,7 @@ func (st *stream) hold(seq uint32, t time.Time, p []byte) bool {
 	return true
 }
 
-// stale is whether a segment has waited maxGapWait behind a gap.
+// stale reports whether a held segment has waited maxGapWait.
 func (st *stream) stale(t time.Time) bool {
 	return slices.ContainsFunc(st.held, func(pc piece) bool { return t.Sub(pc.t) >= maxGapWait })
 }
@@ -84,8 +86,8 @@ func (d *Decoder) sweep(t time.Time) {
 	}
 }
 
-// stream finds or makes the stream for k.
-// With every slot taken, the stalest hunting stream gives way, and there always is one, a lock admits only its own pair.
+// stream returns the stream for k, making it if needed. When the table is full, the stalest
+// hunting stream is dropped; there always is one, since a lock admits only its own pair.
 func (d *Decoder) stream(k key, t time.Time) *stream {
 	if st := d.streams[k]; st != nil {
 		return st
@@ -102,14 +104,15 @@ func (d *Decoder) stream(k key, t time.Time) *stream {
 		emit:      func(body []byte, flags Flags) { d.emit(st, body, flags) },
 	}
 	if d.srv != nil {
-		st.dir = FromClient // admitted while locked, so its reverse is the lock
+		st.dir = FromClient // made while locked, so its reverse is the server
 	}
 	d.born++
 	d.streams[k] = st
 	return st
 }
 
-// stalest breaks ties by age, since map order is random and Feed's times tie.
+// stalest returns the hunting stream heard from longest ago. Ties go to the oldest stream, so
+// that the choice does not depend on map order.
 func (d *Decoder) stalest() *stream {
 	var old *stream
 	for _, st := range d.streams {
@@ -123,6 +126,7 @@ func (d *Decoder) stalest() *stream {
 	return old
 }
 
+// drop removes st, and ends the lock if st is its server.
 func (d *Decoder) drop(st *stream) {
 	if d.srv == st {
 		d.unlock()
@@ -130,8 +134,8 @@ func (d *Decoder) drop(st *stream) {
 	delete(d.streams, st.key)
 }
 
-// place drops what is old, delivers what is next, and holds what is early.
-// A gap that has held segments back for maxGapWait is given up first: the capture missed it.
+// place discards what is old, delivers what is next, and holds what is early. A gap that has held
+// a segment for maxGapWait is given up first.
 func (d *Decoder) place(st *stream, seq uint32, p []byte, t time.Time) {
 	for st.stale(t) {
 		d.skip(st, st.held[0].seq)
@@ -152,14 +156,14 @@ func (d *Decoder) place(st *stream, seq uint32, p []byte, t time.Time) {
 	}
 }
 
+// deliver advances the sequence past p and hands p to the framer.
 func (d *Decoder) deliver(st *stream, p []byte, t time.Time) {
 	st.next += uint32(len(p))
 	d.take(st, p, t)
 }
 
-// take hands p, captured at t, to the stream's framer. A segment that starts like TLS is skipped, and
-// counted lost so that the framer does not join what comes after onto what came before. The lock's pair
-// is never skipped: it is the game's.
+// take hands p, captured at t, to the stream's framer. Unless ParseTLS is set, a segment that
+// starts like a TLS record is skipped and counted as lost. The locked pair is never skipped.
 func (d *Decoder) take(st *stream, p []byte, t time.Time) {
 	st.at = t
 	if !d.c.ParseTLS && st.dir == 0 && tlsLike(p) {
@@ -182,7 +186,8 @@ func (d *Decoder) release(st *stream) {
 	st.held = slices.Delete(st.held, 0, i)
 }
 
-// skip gives up the oldest gap. The stream jumps to the first data it has, held or at seq, not past it, so a lost packet costs only its own frames.
+// skip gives up the oldest gap. The stream jumps to the first data it has, held or at seq, and
+// the framer is told that the bytes between are lost.
 func (d *Decoder) skip(st *stream, seq uint32) {
 	var to = seq
 	if len(st.held) > 0 && after(seq, st.held[0].seq) {
@@ -194,17 +199,21 @@ func (d *Decoder) skip(st *stream, seq uint32) {
 	d.release(st)
 }
 
-// Flush gives up every gap, so what is held behind one is parsed now. Decode calls it when its reader ends.
+// Flush treats the capture as ended: every gap is given up, and what streams held while waiting
+// for more bytes is parsed. Decode calls Flush when its reader ends.
 func (d *Decoder) Flush() {
 	sts := slices.SortedFunc(maps.Values(d.streams), func(a, b *stream) int { return cmp.Compare(a.born, b.born) })
 	for _, st := range sts {
-		for d.streams[st.key] == st && len(st.held) > 0 { // a lock found on the way drops the others
+		for d.streams[st.key] == st && len(st.held) > 0 { // a lock taken here drops the other streams
 			d.skip(st, st.held[0].seq)
+		}
+		if d.streams[st.key] == st {
+			st.fr.end()
 		}
 	}
 }
 
-// tlsLike reports whether p starts a TLS record, a record type from 20 to 23, then version 3.0 to 3.4.
+// tlsLike reports whether p starts like a TLS record: a type from 20 to 23, then version 3.0 to 3.4.
 func tlsLike(p []byte) bool {
 	return len(p) >= 5 && p[0] >= 0x14 && p[0] <= 0x17 && p[1] == 0x03 && p[2] <= 0x04
 }

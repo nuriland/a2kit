@@ -9,12 +9,9 @@ import (
 	"github.com/pierrec/lz4/v4"
 )
 
-// AppendFrame appends a frame with size bytes of payload. The varint counts
-// the opcode, the payload, and 4 for itself.
-//
-// The payload is noise, the same for the same opcode and size. A decoder that
-// has lost its place finds no help in real payloads either, and a constant
-// fill would line up into frames of its own.
+// AppendFrame appends a frame with size bytes of payload. The varint counts the opcode, the
+// payload, and 4 for itself. The payload is pseudo-random bytes, the same for the same opcode
+// and size; a constant fill would itself parse as frames.
 func AppendFrame(b []byte, op0, op1 byte, size int) []byte {
 	b = binary.AppendUvarint(b, uint64(2+size+4))
 	b = append(b, op0, op1)

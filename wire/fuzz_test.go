@@ -47,8 +47,8 @@ func FuzzRoundTrip(f *testing.F) {
 	f.Add([]byte{0xFF, 0x2A, 0x38, 0x01, 0x12, 0x34, 0x83, 0x00, 0x92, 0x10, 0xF2, 0xFF}, uint8(200), true)
 	f.Fuzz(func(t *testing.T, spec []byte, piece uint8, inEnvelopes bool) {
 		var (
-			stream = wiretest.AppendFrame(nil, 0x00, 0x36, 0)
-			want   = []string{"00 36 "}
+			stream = slices.Concat(wiretest.AppendFrame(nil, 0x00, 0x36, 0), wiretest.AppendFrame(nil, 0x00, 0x36, 0))
+			want   = []string{"00 36 ", "00 36 "}
 		)
 		frame := func(b []byte, op0, op1 byte, size int) []byte {
 			f := wiretest.AppendFrame(nil, op0, op1, size)
@@ -57,8 +57,11 @@ func FuzzRoundTrip(f *testing.F) {
 		}
 		for ; len(spec) >= 3; spec = spec[3:] {
 			kind, op0, op1 := spec[0], spec[1], spec[2]
-			if op1 == 0xFF {
-				op1 = 0x38 // FF there begins a bundle
+			if op1 == 0xFF || op1 <= 0x0F {
+				op1 = 0x38 // FF begins a bundle, and a family of 0F or less reads as an envelope header
+			}
+			if op0 == 0 && !inFamily(op1) {
+				op0 = 1 // so does an opcode of 00 outside the families, after padding
 			}
 			size := int(kind>>2) * 37
 			switch kind & 3 {
@@ -74,12 +77,13 @@ func FuzzRoundTrip(f *testing.F) {
 				stream = wiretest.AppendBundle(stream, plain)
 			}
 		}
-		if inEnvelopes {
+		if inEnvelopes { // a tick bare, and the rest in envelopes behind another, as a real stream has them
 			size := 8 + int(piece)*13
-			if r := len(stream) % size; r > 0 && r < minEnvelope {
-				stream = append(stream, make([]byte, minEnvelope-r)...) // padding, so no envelope is too short to believe
+			rest := stream[3:]
+			if r := len(rest) % size; r > 0 && r < minEnvelope {
+				rest = append(rest, make([]byte, minEnvelope-r)...) // padding, so no envelope is too short to believe
 			}
-			stream = enveloped(stream, size)
+			stream = slices.Concat(stream[:3], enveloped(rest, size))
 		}
 
 		d := NewDecoder(Config{ParseTLS: true}) // TLS is judged per segment, and these are not segments
@@ -94,6 +98,7 @@ func FuzzRoundTrip(f *testing.F) {
 			feed(d, p[:n])
 			p = p[n:]
 		}
+		d.Flush()
 		var got []string
 		for f := range d.Frames() {
 			op := f.Opcode.Bytes()
