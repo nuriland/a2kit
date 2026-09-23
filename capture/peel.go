@@ -2,6 +2,7 @@ package capture
 
 import (
 	"encoding/binary"
+	"math/bits"
 	"net/netip"
 
 	"github.com/nuriland/a2kit/wire"
@@ -62,9 +63,10 @@ func network(linkType int, p []byte) (ip []byte, version int) {
 		if len(p) < 4 {
 			return nil, 0
 		}
-		af := binary.LittleEndian.Uint32(p) // little-endian anywhere this runs
-		if linkType == linkLoop {
-			af = binary.BigEndian.Uint32(p)
+		// An address family is small, so a value past 16 bits is in the other byte order.
+		af := binary.LittleEndian.Uint32(p)
+		if af > 0xFFFF {
+			af = bits.ReverseBytes32(af)
 		}
 		return p[4:], family(af)
 	case linkLinuxSLL:

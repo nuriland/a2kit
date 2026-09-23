@@ -87,6 +87,7 @@ func run() error {
 		if err := feed(d, *feedFile); err != nil {
 			return err
 		}
+		d.Flush()
 		for f := range d.Frames() {
 			fmt.Fprintln(out, f)
 		}

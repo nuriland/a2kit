@@ -58,6 +58,7 @@ func TestPeel(t *testing.T) {
 		{"q-in-q", linkEthernet, vlan(wiretest.Ethernet(ip4), 5, 6), src4, "frame"},
 		{"null", linkNull, slices.Concat([]byte{2, 0, 0, 0}, ip4), src4, "frame"},
 		{"null ipv6", linkNull, slices.Concat([]byte{30, 0, 0, 0}, ip6), src6, "frame"},
+		{"null big-endian", linkNull, slices.Concat([]byte{0, 0, 0, 2}, ip4), src4, "frame"},
 		{"loop", linkLoop, slices.Concat([]byte{0, 0, 0, 2}, ip4), src4, "frame"},
 		{"linux sll", linkLinuxSLL, sll, src4, "frame"},
 		{"linux sll2", linkLinuxSLL2, sll2, src6, "frame"},

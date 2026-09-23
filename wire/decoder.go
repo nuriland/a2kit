@@ -45,7 +45,7 @@ func NewDecoder(config Config) *Decoder {
 }
 
 // Feed adds a payload that has no sequence number. Each direction's payloads must be fed in
-// order.
+// order, and Flush called when the input ends.
 func (d *Decoder) Feed(t time.Time, src, dst netip.AddrPort, payload []byte) {
 	if len(payload) == 0 {
 		return
@@ -137,7 +137,7 @@ func (d *Decoder) Decode(r SegmentReader) iter.Seq2[Frame, error] {
 
 // emit queues a frame. The payload is copied, since body points into a buffer that is reused.
 func (d *Decoder) emit(st *stream, body []byte, flags Flags) {
-	op := Opcode(body[0]) | Opcode(body[1])<<8
+	op := opcode(body)
 	flags |= d.lockFrame(st, op, flags)
 	if flags&FromClient != 0 && !d.c.EmitClient {
 		return

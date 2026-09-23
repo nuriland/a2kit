@@ -551,3 +551,13 @@ func BenchmarkNoise(b *testing.B) {
 		}
 	}
 }
+
+// A full buffer drops bytes that were already stripped, so a header split across writes stays
+// where it was.
+func TestEnvelopeSkipNothing(t *testing.T) {
+	e := envelopes{on: true, have: 2}
+	e.skip(0)
+	if e.lost || e.have != 2 {
+		t.Errorf("lost %v, have %d; want the split header kept", e.lost, e.have)
+	}
+}

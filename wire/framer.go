@@ -1,9 +1,6 @@
 package wire
 
-import (
-	"log/slog"
-	"slices"
-)
+import "log/slog"
 
 const (
 	maxFrame        = 1 << 20 // the longest frame, varint included
@@ -37,10 +34,8 @@ type framer struct {
 	plain     []byte    // bundle plaintext, a stack shared by nesting levels
 	env       envelopes // envelope state
 
-	// resume's progress on the frame at buf[0], kept between writes
-	waiting bool  // the last pump stopped waiting on that frame
-	scanned int   // offsets checked
-	pending []int // offsets that more bytes may still make two frames of
+	waiting bool // the last pump stopped waiting on the frame at buf[0]
+	ahead   scan // resume's search past that frame, kept between writes
 }
 
 // write appends p to the stream and parses what it can.
@@ -96,7 +91,7 @@ func (f *framer) settle() {
 func (f *framer) end() {
 	f.over, f.begun = true, true
 	if f.env.lost {
-		f.log.Warn("envelopes lost")
+		f.log.Warn("envelopes given up")
 		f.env = envelopes{}
 	}
 	f.pump()
@@ -218,13 +213,14 @@ func (f *framer) plausible(b []byte, size int) bool {
 		return size > minBundle && (len(b) < 3 || b[2] == 0xFF) // a flagged bundle
 	}
 	if f.knownOnly {
-		return (Opcode(b[0]) | Opcode(b[1])<<8).Known()
+		return opcode(b).Known()
 	}
 	return inFamily(b[1])
 }
 
-// starts reports whether an untrusted stream would accept a frame at p, complete or not.
-func (f *framer) starts(p []byte) verdict {
+// accepts reports whether an untrusted stream would take a frame at p, complete or not. Unlike
+// begins, it refuses an incomplete frame longer than stallLimit.
+func (f *framer) accepts(p []byte) verdict {
 	n, head := f.frameLen(p, false)
 	switch {
 	case n < 0:
@@ -241,27 +237,10 @@ func (f *framer) starts(p []byte) verdict {
 // than stallLimit, so with kept only the pending offsets and the new bytes are checked.
 func (f *framer) resume(p []byte, kept bool) int {
 	if !kept {
-		f.scanned, f.pending = 0, f.pending[:0]
+		f.ahead.reset()
 	}
-	for j := 0; j < len(f.pending); {
-		switch i := f.pending[j]; f.pair(p, i) {
-		case yes:
-			return i
-		case no:
-			f.pending = slices.Delete(f.pending, j, j+1)
-		default:
-			j++
-		}
-	}
-	for f.scanned = max(f.scanned, 1); f.scanned < len(p); f.scanned++ {
-		switch f.pair(p, f.scanned) {
-		case yes:
-			return f.scanned
-		case maybe:
-			f.pending = append(f.pending, f.scanned)
-		}
-	}
-	return 0
+	i, _ := f.ahead.find(1, len(p), func(i int) verdict { return f.pair(p, i) })
+	return i
 }
 
 // pair reports whether p holds two complete frames in a row at i, under the untrusted rules.
@@ -300,7 +279,7 @@ func (f *framer) follows(p []byte) verdict {
 	return f.begins(p)
 }
 
-// begins reports whether a plausible frame begins at p, whatever its length.
+// begins reports whether a plausible frame begins at p, however long it is.
 func (f *framer) begins(p []byte) verdict {
 	v, head := uvarint(p)
 	switch {

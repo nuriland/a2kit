@@ -3,7 +3,6 @@ package wire
 import (
 	"bytes"
 	"encoding/binary"
-	"slices"
 )
 
 // The lengths an envelope header may give.
@@ -14,15 +13,13 @@ const (
 
 // envelopes strips the u32le length headers from a stream whose frames come in envelopes.
 type envelopes struct {
-	on   bool    // headers are being stripped
-	lost bool    // a gap took a header, and the next must be found again
+	on   bool    // the stream is in envelopes
+	lost bool    // a gap took a header, and nothing is stripped until the next is found
 	left int     // body bytes left in the current envelope
 	have int     // header bytes received so far
 	head [4]byte // a header split across writes
 
-	// The search for headers in the raw bytes since the gap, while lost
-	scanned int   // offsets checked
-	pending []int // believable headers whose successors have not arrived
+	search scan // for the headers in the raw bytes since the gap, while lost
 }
 
 // believable reports whether n is a length an envelope header may give.
@@ -31,18 +28,18 @@ func believable(n uint32) bool { return n >= minEnvelope && n <= maxEnvelope }
 // skip accounts for n lost bytes. Within the current body the position is still known; past it,
 // a header was lost.
 func (e *envelopes) skip(n int) {
-	if !e.lost && e.have == 0 && n <= e.left {
+	if !e.lost && n <= e.left {
 		e.left -= n
 		return
 	}
 	e.lost, e.left, e.have = true, 0, 0
-	e.scanned, e.pending = 0, e.pending[:0]
+	e.search.reset()
 }
 
 // strip removes the headers from p in place. A header with a length that is not believable ends
-// the envelopes: its bytes are kept with the rest, and lost is true. The result may be longer
+// the envelopes: its bytes are kept with the rest, and over is true. The result may be longer
 // than p when that header began in an earlier write.
-func (e *envelopes) strip(p []byte) (out []byte, lost bool) {
+func (e *envelopes) strip(p []byte) (out []byte, over bool) {
 	out = p[:0]
 	for len(p) > 0 {
 		if e.left > 0 {
@@ -88,7 +85,7 @@ func (f *framer) envelope(p []byte, afterFrame bool) verdict {
 	if f.begins(bytes.TrimLeft(p, "\x00")) == yes {
 		return no
 	}
-	if v := f.starts(p[4:]); v != yes || afterFrame {
+	if v := f.accepts(p[4:]); v != yes || afterFrame {
 		return v
 	}
 	return chain(p, 0, stallLimit)
@@ -96,10 +93,10 @@ func (f *framer) envelope(p []byte, afterFrame bool) verdict {
 
 // strip removes the headers from f.buf[from:].
 func (f *framer) strip(from int) {
-	out, lost := f.env.strip(f.buf[from:])
+	out, over := f.env.strip(f.buf[from:])
 	f.buf = append(f.buf[:from], out...)
-	if lost {
-		f.log.Warn("envelopes lost")
+	if over {
+		f.log.Warn("envelopes ended")
 		f.aligned = false
 	}
 }
@@ -110,28 +107,23 @@ func (f *framer) strip(from int) {
 // arrived without them and the envelopes are over.
 func (f *framer) refind() bool {
 	e := &f.env
-	for ; e.scanned+4 <= len(f.buf); e.scanned++ {
-		if believable(binary.LittleEndian.Uint32(f.buf[e.scanned:])) {
-			e.pending = append(e.pending, e.scanned)
+	h, found := e.search.find(0, len(f.buf)-3, func(h int) verdict {
+		if !believable(binary.LittleEndian.Uint32(f.buf[h:])) {
+			return no
 		}
-	}
-	for i := 0; i < len(e.pending); {
-		switch h := e.pending[i]; chain(f.buf, h, maxBuf) {
-		case maybe:
-			i++
-		case yes:
-			f.log.Info("envelopes found again", "at", h)
-			*e = envelopes{on: true, left: h, pending: e.pending[:0]}
-			f.strip(0)
-			return true
-		default:
-			e.pending = slices.Delete(e.pending, i, i+1)
-		}
-	}
-	if len(f.buf) < maxBuf {
+		return chain(f.buf, h, maxBuf)
+	})
+	switch {
+	case found:
+		f.log.Info("envelopes found again", "at", h)
+		e.lost, e.left = false, h
+		e.search.reset()
+		f.strip(0)
+		return true
+	case len(f.buf) < maxBuf:
 		return false
 	}
-	f.log.Warn("envelopes lost")
+	f.log.Warn("envelopes given up")
 	*e = envelopes{}
 	return true
 }

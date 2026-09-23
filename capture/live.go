@@ -72,8 +72,11 @@ func (l *Live) ReadSegment() (wire.Segment, error) {
 		if err == pcap.NextErrorTimeoutExpired {
 			continue
 		}
+		if err == io.EOF {
+			return wire.Segment{}, io.EOF
+		}
 		if err != nil {
-			return wire.Segment{}, err
+			return wire.Segment{}, fmt.Errorf("capture: %w", err)
 		}
 		if l.rec != nil {
 			if err := l.rec.write(ci.Timestamp, data, ci.Length); err != nil {

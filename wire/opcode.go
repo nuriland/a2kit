@@ -1,14 +1,18 @@
 package wire
 
 import (
+	"encoding/binary"
 	"fmt"
 	"slices"
 )
 
-// Opcode is the two bytes that begin a frame's body, the first in the low byte: wire bytes
-// 04 38 are 0x3804. The high byte is the family.
+// Opcode is the two bytes that begin a frame's body, read little-endian: wire bytes 04 38 are 0x3804. The high byte is the family.
 type Opcode uint16
 
+// opcode reads the opcode at the start of b.
+func opcode(b []byte) Opcode { return Opcode(binary.LittleEndian.Uint16(b)) }
+
+// Bytes returns the opcode's two bytes in wire order.
 func (o Opcode) Bytes() [2]byte { return [2]byte{byte(o), byte(o >> 8)} }
 
 // String is the opcode in wire order, "04 38".
