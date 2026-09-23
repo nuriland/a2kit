@@ -202,7 +202,7 @@ func (s *sampler) capture(b []byte) []byte {
 	)
 	for _, i := range order {
 		seg := segs[i]
-		pc.Add(t, wiretest.Ethernet(wiretest.TCP(srv, cli, isn+uint32(seg.off), byte(wire.PSH|wire.ACK), b[seg.off:seg.off+seg.n])))
+		pc.Add(t, wiretest.Ethernet(wiretest.TCP(srv, cli, isn+uint32(seg.off), 0, byte(wire.PSH|wire.ACK), b[seg.off:seg.off+seg.n])))
 		t = t.Add(time.Duration(1+s.r.IntN(2000)) * time.Microsecond)
 	}
 	return pc.Bytes()

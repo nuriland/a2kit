@@ -56,7 +56,7 @@ func after(a, b uint32) bool { return int32(a-b) > 0 }
 
 // hold inserts a segment into held, in sequence order. It reports whether the segment is held,
 // including when a copy of it already was.
-func (st *stream) hold(seq uint32, t time.Time, p []byte) bool {
+func (d *Decoder) hold(st *stream, seq uint32, t time.Time, p []byte) bool {
 	i := len(st.held)
 	for i > 0 && after(st.held[i-1].seq, seq) {
 		i--
@@ -69,6 +69,7 @@ func (st *stream) hold(seq uint32, t time.Time, p []byte) bool {
 	}
 	st.held = slices.Insert(st.held, i, piece{seq, t, bytes.Clone(p)})
 	st.heldBytes += len(p)
+	d.held++
 	return true
 }
 
@@ -79,6 +80,9 @@ func (st *stream) stale(t time.Time) bool {
 
 // sweep drops the streams closed longer than closeGrace ago.
 func (d *Decoder) sweep(t time.Time) {
+	if d.closing == 0 {
+		return
+	}
 	for _, st := range d.streams {
 		if !st.closed.IsZero() && t.Sub(st.closed) >= closeGrace {
 			d.drop(st)
@@ -89,7 +93,11 @@ func (d *Decoder) sweep(t time.Time) {
 // stream returns the stream for k, making it if needed. When the table is full, the stalest
 // hunting stream is dropped; there always is one, since a lock admits only its own pair.
 func (d *Decoder) stream(k key, t time.Time) *stream {
+	if st := d.last; st != nil && st.key == k {
+		return st
+	}
 	if st := d.streams[k]; st != nil {
+		d.last = st
 		return st
 	}
 
@@ -108,6 +116,7 @@ func (d *Decoder) stream(k key, t time.Time) *stream {
 	}
 	d.born++
 	d.streams[k] = st
+	d.last = st
 	return st
 }
 
@@ -131,6 +140,13 @@ func (d *Decoder) drop(st *stream) {
 	if d.srv == st {
 		d.unlock()
 	}
+	if !st.closed.IsZero() {
+		d.closing--
+	}
+	if d.last == st {
+		d.last = nil
+	}
+	d.held -= len(st.held)
 	delete(d.streams, st.key)
 }
 
@@ -149,10 +165,23 @@ func (d *Decoder) place(st *stream, seq uint32, p []byte, t time.Time) {
 			d.release(st)
 			return
 		}
-		if st.hold(seq, t, p) {
+		if d.hold(st, seq, t, p) {
 			return
 		}
 		d.skip(st, seq) // no room left to wait
+	}
+}
+
+// acked gives up the gaps in k's stream that its receiver has acknowledged: the receiver has
+// those bytes, so no retransmit is coming for the capture to see. A gap is given up only once the
+// ACK reaches the data held past it, so the stream never jumps further than bytes it has.
+func (d *Decoder) acked(k key, ack uint32) {
+	st := d.streams[k]
+	if st == nil {
+		return
+	}
+	for len(st.held) > 0 && !after(st.held[0].seq, ack) {
+		d.skip(st, st.held[0].seq)
 	}
 }
 
@@ -184,6 +213,7 @@ func (d *Decoder) release(st *stream) {
 		st.heldBytes -= len(pc.data)
 	}
 	st.held = slices.Delete(st.held, 0, i)
+	d.held -= i
 }
 
 // skip gives up the oldest gap. The stream jumps to the first data it has, held or at seq, and

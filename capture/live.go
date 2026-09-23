@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"time"
 
 	"github.com/gopacket/gopacket/pcap"
@@ -48,8 +49,17 @@ func OpenLive(name string) (*Live, error) {
 	}
 	defer in.CleanUp()
 
-	// A read wakes every 10ms, so that Close never waits longer.
-	err = errors.Join(in.SetSnapLen(snapLen), in.SetPromisc(false), in.SetTimeout(10*time.Millisecond), in.SetBufferSize(bufferSize))
+	// Immediate mode hands each packet over as it arrives, rather than when a buffer fills or the
+	// timeout expires. Not on Linux, where libpcap then gives every packet a slot as big as the
+	// largest the device can deliver, 64 KiB with offloads on, and the buffer holds 256 packets.
+	// A read still wakes every 10ms, so that Close never waits longer.
+	err = errors.Join(
+		in.SetSnapLen(snapLen),
+		in.SetPromisc(false),
+		in.SetImmediateMode(runtime.GOOS != "linux"),
+		in.SetTimeout(10*time.Millisecond),
+		in.SetBufferSize(bufferSize),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("capture: %s: %w", name, err)
 	}

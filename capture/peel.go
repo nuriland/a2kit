@@ -41,6 +41,7 @@ func peel(linkType int, p []byte) (wire.Segment, bool) {
 		Src:     netip.AddrPortFrom(src, binary.BigEndian.Uint16(tcp[0:])),
 		Dst:     netip.AddrPortFrom(dst, binary.BigEndian.Uint16(tcp[2:])),
 		Seq:     binary.BigEndian.Uint32(tcp[4:]),
+		Ack:     binary.BigEndian.Uint32(tcp[8:]),
 		Flags:   wire.TCPFlags(tcp[13]),
 		Payload: tcp[n:],
 	}, true

@@ -12,6 +12,7 @@ type Segment struct {
 	Flags    TCPFlags
 	IfIndex  int
 	Seq      uint32
+	Ack      uint32 // the next byte Src expects from Dst, if Flags has ACK
 	Payload  []byte // may alias the reader's buffer until its next read
 }
 

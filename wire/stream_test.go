@@ -93,6 +93,53 @@ func TestGapWait(t *testing.T) {
 	expect(t, d, "05 38 len=4 resynced\n05 38 len=4 -\n")
 }
 
+// ack is a bare ACK from the client, acknowledging the server's bytes before seq.
+func ack(seq uint32, at time.Duration) Segment {
+	return Segment{Time: epoch.Add(at), Src: cli, Dst: srv, Flags: ACK, Ack: seq}
+}
+
+func TestGapAcked(t *testing.T) {
+	var (
+		a = wiretest.AppendFrame(nil, 0x04, 0x38, 10)
+		b = wiretest.AppendFrame(nil, 0x05, 0x38, 10) // the capture misses it
+		c = wiretest.AppendFrame(nil, 0x06, 0x38, 10)
+	)
+	for _, isn := range []uint32{1000, 0xFFFFFFF0} {
+		t.Run(fmt.Sprint(isn), func(t *testing.T) {
+			var (
+				d   = NewDecoder(Config{})
+				bAt = isn + uint32(len(a))
+				cAt = bAt + uint32(len(b))
+				end = cAt + uint32(len(c))
+			)
+			d.FeedSegment(segment(isn-1, SYN, nil, 0))
+			d.FeedSegment(segment(isn, ACK, a, 1))
+			d.FeedSegment(segment(cAt, ACK, c, 2))
+			d.FeedSegment(ack(bAt+5, 3)) // into the gap: the rest of it may still come
+			d.FeedSegment(Segment{Time: epoch.Add(4), Src: cli, Dst: srv, Ack: end})
+			expect(t, d, "04 38 len=10 -\n") // no ACK flag, so no ACK
+
+			d.FeedSegment(ack(end, 5))
+			expect(t, d, "06 38 len=10 resynced\n")
+		})
+	}
+}
+
+// An ACK past bytes the capture has not seen moves nothing, so bytes that follow in order are
+// still parsed.
+func TestAckAhead(t *testing.T) {
+	var (
+		d = NewDecoder(Config{})
+		a = wiretest.AppendFrame(nil, 0x04, 0x38, 10)
+		b = wiretest.AppendFrame(nil, 0x05, 0x38, 10)
+	)
+	d.FeedSegment(segment(0, SYN, nil, 0))
+	d.FeedSegment(segment(1, ACK, a, 1))
+	d.FeedSegment(ack(100000, 2))
+	d.FeedSegment(segment(1+uint32(len(a)), ACK, b, 3))
+	expect(t, d, "04 38 len=10 -\n05 38 len=10 -\n")
+}
+
 func TestFlush(t *testing.T) {
 	var (
 		d = NewDecoder(Config{})

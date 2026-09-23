@@ -7,11 +7,12 @@ import (
 
 // TCP returns an IP packet, IPv4 or IPv6 as src is, that carries one TCP
 // segment. Checksums are left zero; nothing here checks them.
-func TCP(src, dst netip.AddrPort, seq uint32, flags byte, payload []byte) []byte {
+func TCP(src, dst netip.AddrPort, seq, ack uint32, flags byte, payload []byte) []byte {
 	tcp := make([]byte, 20, 20+len(payload))
 	binary.BigEndian.PutUint16(tcp[0:], src.Port())
 	binary.BigEndian.PutUint16(tcp[2:], dst.Port())
 	binary.BigEndian.PutUint32(tcp[4:], seq)
+	binary.BigEndian.PutUint32(tcp[8:], ack)
 	tcp[12] = 5 << 4 // header length, in words
 	tcp[13] = flags
 	tcp = append(tcp, payload...)

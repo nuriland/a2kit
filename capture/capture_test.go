@@ -253,7 +253,7 @@ func FuzzReader(f *testing.F) {
 	}
 	ng := wiretest.NewPcapng(binary.LittleEndian)
 	ng.Interface(linkEthernet, 9, 0)
-	ng.Packet(0, packetTime, wiretest.Ethernet(wiretest.TCP(src4, dst4, 1, 0x18, []byte("frame"))))
+	ng.Packet(0, packetTime, wiretest.Ethernet(wiretest.TCP(src4, dst4, 1, 0, 0x18, []byte("frame"))))
 	f.Add(sample)
 	f.Add(ng.Bytes())
 	f.Fuzz(func(t *testing.T, b []byte) {

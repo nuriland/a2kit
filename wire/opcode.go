@@ -3,7 +3,6 @@ package wire
 import (
 	"encoding/binary"
 	"fmt"
-	"slices"
 )
 
 // Opcode is the two bytes that begin a frame's body, read little-endian: wire bytes 04 38 are 0x3804. The high byte is the family.
@@ -19,7 +18,15 @@ func (o Opcode) Bytes() [2]byte { return [2]byte{byte(o), byte(o >> 8)} }
 func (o Opcode) String() string { return fmt.Sprintf("%02X %02X", byte(o), byte(o>>8)) }
 
 // Known reports whether o is in the table of known opcodes.
-func (o Opcode) Known() bool { return slices.Contains(known[:], o) }
+func (o Opcode) Known() bool { return knownBits[o>>6]&(1<<(o&63)) != 0 }
+
+// knownBits is known as a bitmap, one bit an opcode.
+var knownBits = func() (bits [1 << 10]uint64) {
+	for _, o := range known {
+		bits[o>>6] |= 1 << (o & 63)
+	}
+	return bits
+}()
 
 // known lists the opcodes the lock counts and KnownOnly keeps, by family.
 var known = [...]Opcode{

@@ -32,8 +32,8 @@ func vlan(eth []byte, ids ...uint16) []byte {
 func TestPeel(t *testing.T) {
 	var (
 		payload  = []byte("frame")
-		ip4      = wiretest.TCP(src4, dst4, 7, byte(wire.ACK), payload)
-		ip6      = wiretest.TCP(src6, dst6, 7, byte(wire.ACK), payload)
+		ip4      = wiretest.TCP(src4, dst4, 7, 9, byte(wire.ACK), payload)
+		ip6      = wiretest.TCP(src6, dst6, 7, 9, byte(wire.ACK), payload)
 		sll      = slices.Concat(make([]byte, 14), []byte{0x08, 0x00}, ip4)
 		sll2     = slices.Concat([]byte{0x86, 0xDD}, make([]byte, 18), ip6)
 		fragment = slices.Clone(ip4)
@@ -85,8 +85,8 @@ func TestPeel(t *testing.T) {
 			if tt.src.Addr().Is6() {
 				dst = dst6
 			}
-			if s.Src != tt.src || s.Dst != dst || s.Seq != 7 || s.Flags != wire.ACK || !bytes.Equal(s.Payload, []byte(tt.payload)) {
-				t.Errorf("%v -> %v seq %d flags %#x payload %q", s.Src, s.Dst, s.Seq, s.Flags, s.Payload)
+			if s.Src != tt.src || s.Dst != dst || s.Seq != 7 || s.Ack != 9 || s.Flags != wire.ACK || !bytes.Equal(s.Payload, []byte(tt.payload)) {
+				t.Errorf("%v -> %v seq %d ack %d flags %#x payload %q", s.Src, s.Dst, s.Seq, s.Ack, s.Flags, s.Payload)
 			}
 		})
 	}

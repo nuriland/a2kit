@@ -18,6 +18,9 @@ type Config struct {
 	Logger     *slog.Logger  // resyncs, locks and lost gaps, default silent
 }
 
+// slabSize is the allocation that payloads are copied into, many frames to one.
+const slabSize = 16 << 10
+
 // Decoder turns TCP segments into frames, and keeps them until they are taken. It is not safe
 // for concurrent use.
 type Decoder struct {
@@ -25,11 +28,15 @@ type Decoder struct {
 	l *slog.Logger
 
 	born    uint64          // streams made
+	closing int             // streams that have seen a FIN or RST, for sweep
+	held    int             // segments held past gaps, in every stream
 	head    int             // index of the first unyielded frame
 	streams map[key]*stream // streams by source and destination
+	last    *stream         // the stream looked up last
 	srv     *stream         // the locked server side, nil while hunting
 	lockAt  time.Time       // the newest traffic on the lock
 	queue   []Frame         // frames to yield
+	slab    []byte          // room for the payloads of the next frames
 }
 
 // NewDecoder returns a Decoder configured by config.
@@ -60,11 +67,15 @@ func (d *Decoder) Feed(t time.Time, src, dst netip.AddrPort, payload []byte) {
 }
 
 // FeedSegment adds a segment, placed by its sequence number. Old bytes are discarded, and bytes
-// past a gap are held until the gap fills or is given up.
+// past a gap are held until the gap fills or is given up. An ACK gives up the gaps in the other
+// direction that it acknowledges.
 func (d *Decoder) FeedSegment(s Segment) {
 	k := key{s.Src, s.Dst, s.IfIndex}
 	if !d.admit(k, s.Time) {
 		return
+	}
+	if s.Flags&ACK != 0 && d.held > 0 { // with nothing held, there is no gap to give up
+		d.acked(k.reverse(), s.Ack)
 	}
 	if len(s.Payload) == 0 && s.Flags&(SYN|FIN|RST) == 0 {
 		return // a bare ack
@@ -84,6 +95,9 @@ func (d *Decoder) FeedSegment(s Segment) {
 	}
 	st.last = s.Time
 	if s.Flags&(FIN|RST) != 0 {
+		if st.closed.IsZero() {
+			d.closing++
+		}
 		st.closed = s.Time
 	}
 	if !st.synced {
@@ -151,7 +165,23 @@ func (d *Decoder) emit(st *stream, body []byte, flags Flags) {
 		Dst:     st.key.dst,
 		IfIndex: st.key.ifIndex,
 		Opcode:  op,
-		Payload: bytes.Clone(body[2:]),
+		Payload: d.keep(body[2:]),
 		Flags:   flags,
 	})
+}
+
+// keep returns a copy of p for a frame to own. Payloads share slabs, so that a frame costs an
+// allocation only once in a while, and a frame that is kept keeps its slab. A copy's capacity is
+// its length, so that appending to one cannot reach the next.
+func (d *Decoder) keep(p []byte) []byte {
+	if len(p) > slabSize/4 {
+		return bytes.Clone(p)
+	}
+	if len(p) >= len(d.slab) { // >=, so that an empty payload is never nil
+		d.slab = make([]byte, slabSize)
+	}
+	c := d.slab[:len(p):len(p)]
+	d.slab = d.slab[len(p):]
+	copy(c, p)
+	return c
 }

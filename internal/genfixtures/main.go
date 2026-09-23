@@ -161,7 +161,7 @@ func sample(dir string) {
 	pc := wiretest.NewPcap(binary.LittleEndian, false, 1)
 	at := func(ms int) time.Time { return time.Unix(1700000000, int64(ms)*int64(time.Millisecond)) }
 	add := func(ms int, src, dst netip.AddrPort, seq uint32, flags byte, p []byte) {
-		pc.Add(at(ms), wiretest.Ethernet(wiretest.TCP(src, dst, seq, flags, p)))
+		pc.Add(at(ms), wiretest.Ethernet(wiretest.TCP(src, dst, seq, 0, flags, p)))
 	}
 	add(0, web, lan, 1, data, http)
 	add(2, https, lan, 1, data, tls)
