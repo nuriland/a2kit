@@ -9,4 +9,8 @@ Passive AION 2 protocol decoder. No injection.
 - **CPU:** ~6 µs per second of play
 - **Latency after a lost packet:** 51 ms median
 
+## Logs
+
+`dump -pcap fight.pcap -log fight.jsonl` writes an `a2log/v0.1` file, which contains a header line, then one JSON line per frame with its raw payload. Captures hold other players' data, so keep them private.
+
 Work in progress.

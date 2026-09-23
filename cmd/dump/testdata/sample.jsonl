@@ -1,0 +1,5 @@
+{"schema":"a2log/v0.1","decoder":"github.com/nuriland/a2kit@test","source":{"kind":"pcap","path":"sample.pcap"},"t0":"2023-11-14T22:13:20.006Z"}
+{"t":0,"opcode":"04 38","flags":[],"src":"10.0.0.2:13328","dst":"10.0.0.1:10000","payload":"CiVcTDTF4sCawtXNd7jME2wbZSlg3M7U793tkUF+MCMecfPO4UigCck="}
+{"t":0,"opcode":"2A 38","flags":[],"src":"10.0.0.2:13328","dst":"10.0.0.1:10000","payload":"388Fz+24ovlwdl37DHitzw=="}
+{"t":-1,"opcode":"05 38","flags":["server"],"src":"10.0.0.2:13328","dst":"10.0.0.1:10000","payload":"V55Tr8PnrYE1XH0yv/V0iQuANb0="}
+{"t":-1,"opcode":"33 36","flags":["server"],"src":"10.0.0.2:13328","dst":"10.0.0.1:10000","payload":"4/J+jBvA66x5a0y/"}

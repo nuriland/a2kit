@@ -11,12 +11,15 @@
 //
 // With -client, it prints the client's frames too, and with -v it logs what
 // the decoder does to stderr. -write records a live capture to a pcap, for
-// -pcap to replay: all the TCP the device sees, not only the game's.
+// -pcap to replay: all the TCP the device sees, not only the game's. -log FILE
+// also writes the frames to FILE as a2log lines: a header, then one JSON object
+// a frame, with its payload.
 package main
 
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -38,6 +41,7 @@ var (
 	dev       = flag.String("dev", "", "the live capture `device`")
 	index     = flag.Int("index", -1, "the live capture device, by its `number` in -list")
 	writeFile = flag.String("write", "", "record the live capture to a pcap `file`")
+	logFile   = flag.String("log", "", "write the frames to an a2log `file`")
 	list      = flag.Bool("list", false, "list the devices that can be captured")
 	client    = flag.Bool("client", false, "print the client's frames too")
 	verbose   = flag.Bool("v", false, "log what the decoder does")
@@ -64,7 +68,7 @@ func main() {
 	}
 }
 
-func run() error {
+func run() (err error) {
 	if *list {
 		return devices()
 	}
@@ -74,14 +78,42 @@ func run() error {
 	if *writeFile != "" && !*live {
 		return errors.New("-write records a live capture; add -live")
 	}
+	if *logFile != "" && *feedFile != "" && (*pcapFile != "" || *live) {
+		return errors.New("-log takes one source")
+	}
 
 	cfg := wire.Config{EmitClient: *client}
 	if *verbose {
 		cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{ReplaceAttr: untimed}))
 	}
 	d := wire.NewDecoder(cfg)
-	out := bufio.NewWriter(os.Stdout)
-	defer out.Flush()
+
+	var out io.Writer = os.Stdout // unbuffered with -live, so that a frame shows when it comes
+	if !*live {
+		w := bufio.NewWriter(os.Stdout)
+		defer w.Flush()
+		out = w
+	}
+	var lg *log
+	if *logFile != "" {
+		var f *os.File
+		if f, err = os.Create(*logFile); err != nil {
+			return err
+		}
+		lg = &log{enc: json.NewEncoder(f), hdr: header()}
+		defer func() {
+			if cerr := errors.Join(lg.end(), f.Close()); err == nil {
+				err = cerr
+			}
+		}()
+	}
+	emit := func(f wire.Frame) error {
+		fmt.Fprintln(out, f)
+		if lg == nil {
+			return nil
+		}
+		return lg.write(f)
+	}
 
 	if *feedFile != "" {
 		if err := feed(d, *feedFile); err != nil {
@@ -89,7 +121,9 @@ func run() error {
 		}
 		d.Flush()
 		for f := range d.Frames() {
-			fmt.Fprintln(out, f)
+			if err := emit(f); err != nil {
+				return err
+			}
 		}
 	}
 	switch {
@@ -99,23 +133,23 @@ func run() error {
 			return err
 		}
 		defer f.Close()
-		return decode(d, f, out)
+		return decode(d, f, emit)
 	case *live:
-		return runLive(d, os.Stdout) // unbuffered, so that a frame shows when it comes
+		return runLive(d, emit)
 	}
 	return nil
 }
 
 // runLive decodes a device until Ctrl-C, and records it too with -write.
-func runLive(d *wire.Decoder, out io.Writer) (err error) {
+func runLive(d *wire.Decoder, emit func(wire.Frame) error) (err error) {
 	l, err := openLive()
 	if err != nil {
 		return err
 	}
 	defer l.Close()
 	if *writeFile != "" {
-		f, err := os.Create(*writeFile)
-		if err != nil {
+		var f *os.File
+		if f, err = os.Create(*writeFile); err != nil {
 			return err
 		}
 		defer func() {
@@ -130,7 +164,7 @@ func runLive(d *wire.Decoder, out io.Writer) (err error) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	context.AfterFunc(ctx, func() { l.Close() }) // ends the decode below
-	return decode(d, l, out)
+	return decode(d, l, emit)
 }
 
 // untimed drops the time from log lines, since the frames carry their own.
@@ -141,12 +175,14 @@ func untimed(groups []string, a slog.Attr) slog.Attr {
 	return a
 }
 
-func decode(d *wire.Decoder, r wire.SegmentReader, out io.Writer) error {
+func decode(d *wire.Decoder, r wire.SegmentReader, emit func(wire.Frame) error) error {
 	for f, err := range d.Decode(r) {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(out, f)
+		if err := emit(f); err != nil {
+			return err
+		}
 	}
 	return nil
 }
