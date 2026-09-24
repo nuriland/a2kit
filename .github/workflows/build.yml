@@ -113,4 +113,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sha256sum dump-* > SHA256SUMS
-          gh release create "$GITHUB_REF_NAME" dump-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --generate-notes
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" dump-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber

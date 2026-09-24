@@ -1,20 +1,11 @@
-// Dump prints a line for each game frame it finds:
+// Dump prints a line for each game frame it finds
 //
 //	ts=1700000000006000000 opcode=04 38 len=41 flags=server src=10.0.0.2:13328 dst=10.0.0.1:10000
 //
-// Usage:
+// With -events, it prints what the frames mean instead, as
+// game reads them:
 //
-//	dump -pcap FILE                                  a pcap or pcapng file
-//	dump -feed FILE                                  raw TCP payload, server 10.0.0.2:13328 to client 10.0.0.1:10000
-//	dump -live [-dev NAME | -index N] [-write FILE]  a device, by default the first one up, or on Windows all adapters
-//	dump -list                                       the devices that can be captured
-//
-// With -client, it prints the client's frames too, and with -v it logs what
-// the decoder does to stderr, and with -live how far the frames run behind the
-// wire, every few seconds. -write records a live capture to a pcap, for
-// -pcap to replay: all the TCP the device sees, not only the game's. -log FILE
-// also writes the frames to FILE as a2log lines: a header, then one JSON object
-// a frame, with its payload.
+//	ts=1700000000006000000 game.Hit {Actor:15943 Target:37365 Skill:11020000 Damage:41 Extra:[] Type:2 Scalar:10000 Mods:0 Direction:0}
 package main
 
 import (
@@ -32,6 +23,7 @@ import (
 	"time"
 
 	"github.com/nuriland/a2kit/capture"
+	"github.com/nuriland/a2kit/game"
 	"github.com/nuriland/a2kit/wire"
 )
 
@@ -45,6 +37,7 @@ var (
 	logFile   = flag.String("log", "", "write the frames to an a2log `file`")
 	list      = flag.Bool("list", false, "list the devices that can be captured")
 	client    = flag.Bool("client", false, "print the client's frames too")
+	events    = flag.Bool("events", false, "print what the frames mean, as game reads them, instead of the frames")
 	verbose   = flag.Bool("v", false, "log what the decoder does")
 )
 
@@ -108,7 +101,11 @@ func run() (err error) {
 		defer behind.report()
 	}
 	emit := func(f wire.Frame) error {
-		fmt.Fprintln(out, f)
+		if !*events {
+			fmt.Fprintln(out, f)
+		} else if e, ok := game.Parse(f); ok {
+			fmt.Fprintf(out, "ts=%d %T %+v\n", f.Time.UnixNano(), e, e)
+		}
 		if behind != nil {
 			behind.note(f)
 		}

@@ -1,0 +1,3 @@
+42 36 game.Death {Entity:37365 Flag:3}
+42 36 game.Death {Entity:31355 Flag:3}
+42 36 game.Death {Entity:27938 Flag:1}

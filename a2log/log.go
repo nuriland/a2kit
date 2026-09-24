@@ -1,3 +1,4 @@
+// Package a2log is the fight log that dump -log writes: a Header line, then one Frame a line, each a JSON object.
 package a2log
 
 import "time"

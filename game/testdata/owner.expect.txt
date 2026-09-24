@@ -1,0 +1,3 @@
+04 8D game.Owner {Entity:37365 Actor:15943 Skill:11420000 Name:Play}
+04 8D game.Owner {Entity:31355 Actor:15943 Skill:11420000 Name:Play}
+04 8D game.Owner {Entity:33204 Actor:15943 Skill:11020000 Name:Play}

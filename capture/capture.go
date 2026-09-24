@@ -1,3 +1,6 @@
+// Package capture reads TCP segments from pcap and pcapng files, and from a live device.
+//
+//	libpcap on macOS and Linux, pktmon on Windows
 package capture
 
 import (

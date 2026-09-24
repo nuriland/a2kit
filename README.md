@@ -1,6 +1,6 @@
 # a2kit
 
-Passive AION 2 protocol decoder. No injection.
+Passive AION 2 protocol decoder. No injection. No Npcap/WinPcap required.
 
 ## Performance (on real game data, Apple Silicon)
 
