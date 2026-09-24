@@ -6,11 +6,12 @@
 //
 //	dump -pcap FILE                                  a pcap or pcapng file
 //	dump -feed FILE                                  raw TCP payload, server 10.0.0.2:13328 to client 10.0.0.1:10000
-//	dump -live [-dev NAME | -index N] [-write FILE]  a device, or the first one up
+//	dump -live [-dev NAME | -index N] [-write FILE]  a device, by default the first one up, or on Windows all adapters
 //	dump -list                                       the devices that can be captured
 //
 // With -client, it prints the client's frames too, and with -v it logs what
-// the decoder does to stderr. -write records a live capture to a pcap, for
+// the decoder does to stderr, and with -live how far the frames run behind the
+// wire, every few seconds. -write records a live capture to a pcap, for
 // -pcap to replay: all the TCP the device sees, not only the game's. -log FILE
 // also writes the frames to FILE as a2log lines: a header, then one JSON object
 // a frame, with its payload.
@@ -72,14 +73,8 @@ func run() (err error) {
 	if *list {
 		return devices()
 	}
-	if *pcapFile == "" && *feedFile == "" && !*live {
-		return errUsage
-	}
-	if *writeFile != "" && !*live {
-		return errors.New("-write records a live capture; add -live")
-	}
-	if *logFile != "" && *feedFile != "" && (*pcapFile != "" || *live) {
-		return errors.New("-log takes one source")
+	if err := validateFlags(); err != nil {
+		return err
 	}
 
 	cfg := wire.Config{EmitClient: *client}
@@ -107,8 +102,16 @@ func run() (err error) {
 			}
 		}()
 	}
+	var behind *lag
+	if *verbose && *live {
+		behind = newLag(cfg.Logger, time.Now)
+		defer behind.report()
+	}
 	emit := func(f wire.Frame) error {
 		fmt.Fprintln(out, f)
+		if behind != nil {
+			behind.note(f)
+		}
 		if lg == nil {
 			return nil
 		}
@@ -146,7 +149,7 @@ func runLive(d *wire.Decoder, emit func(wire.Frame) error) (err error) {
 	if err != nil {
 		return err
 	}
-	defer l.Close()
+	defer func() { err = errors.Join(err, l.Close()) }()
 	if *writeFile != "" {
 		var f *os.File
 		if f, err = os.Create(*writeFile); err != nil {
@@ -165,6 +168,29 @@ func runLive(d *wire.Decoder, emit func(wire.Frame) error) (err error) {
 	defer stop()
 	context.AfterFunc(ctx, func() { l.Close() }) // ends the decode below
 	return decode(d, l, emit)
+}
+
+// validateFlags takes exactly one source, and the flags that belong to -live only with it.
+func validateFlags() error {
+	sources := 0
+	for _, set := range []bool{*pcapFile != "", *feedFile != "", *live} {
+		if set {
+			sources++
+		}
+	}
+	switch {
+	case sources == 0:
+		return errUsage
+	case sources > 1:
+		return errors.New("-pcap, -feed, and -live take one source")
+	case !*live && (*dev != "" || *index >= 0):
+		return errors.New("-dev and -index select a live capture; add -live")
+	case *dev != "" && *index >= 0:
+		return errors.New("-dev and -index select the same capture")
+	case !*live && *writeFile != "":
+		return errors.New("-write records a live capture; add -live")
+	}
+	return nil
 }
 
 // untimed drops the time from log lines, since the frames carry their own.

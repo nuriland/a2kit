@@ -25,7 +25,7 @@ jobs:
           - os: macos-latest
             flags: -race
           - os: windows-latest
-            cgo: '0' # the runner has no Npcap, so no cgo, and without cgo no -race
+            cgo: '0'
     runs-on: ${{ matrix.os }}
     env:
       CGO_ENABLED: ${{ matrix.cgo || '1' }}
@@ -64,7 +64,6 @@ jobs:
         include:
           - { os: ubuntu-latest, goos: linux, goarch: amd64, cgo: '1' }
           - { os: macos-latest, goos: darwin, goarch: arm64, cgo: '1' }
-          # Npcap is loaded at run time, so Windows needs no cgo, and Linux cross-compiles it.
           - { os: ubuntu-latest, goos: windows, goarch: amd64, cgo: '0' }
     runs-on: ${{ matrix.os }}
     steps:

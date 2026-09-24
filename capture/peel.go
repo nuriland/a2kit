@@ -15,6 +15,7 @@ const (
 	linkLoop      = 108 // OpenBSD loopback: the same, big-endian
 	linkLinuxSLL  = 113 // Linux cooked capture
 	linkLinuxSLL2 = 276 // its second version, what tcpdump -i any writes
+	linkRaw       = 101 // raw IP
 	protoTCP      = 6   // TCP protocol number
 )
 

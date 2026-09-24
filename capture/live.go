@@ -1,4 +1,4 @@
-//go:build cgo || windows
+//go:build cgo && !windows
 
 package capture
 
@@ -25,7 +25,7 @@ const (
 // bufferSize is the kernel buffer of a live capture.
 const bufferSize = 16 << 20
 
-// Live captures a device's TCP through libpcap, or Npcap on Windows.
+// Live captures a device's TCP through libpcap.
 type Live struct {
 	h    *pcap.Handle
 	rec  *recorder // nil unless recording
@@ -33,8 +33,7 @@ type Live struct {
 }
 
 // OpenLive with no name takes the first device that is up, has an address, is
-// not a loopback, and is not known to be disconnected. It needs root or the
-// access_bpf group on macOS, and Administrator on Windows.
+// not a loopback, and is not known to be disconnected. It needs root or the access_bpf group on macOS.
 func OpenLive(name string) (*Live, error) {
 	if name == "" {
 		var err error
@@ -115,7 +114,7 @@ func (l *Live) Record(w io.Writer) error {
 // does, 12 or 14, where a file uses 101.
 func fileLinkType(dlt int) int {
 	if dlt == 12 || dlt == 14 {
-		return 101
+		return linkRaw
 	}
 	return dlt
 }
