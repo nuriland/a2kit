@@ -14,7 +14,7 @@ import (
 
 // Config configures a Decoder. The zero Config is ready to use.
 type Config struct {
-	EmitClient bool          // keep the client side's frames too
+	EmitClient bool          // keep the client side's frames too, whose bodies are encrypted
 	KnownOnly  bool          // keep only known opcodes, and take no others as plausible
 	ParseTLS   bool          // parse segments that start like TLS records
 	LockIdle   time.Duration // the silence that ends the lock, 60s if zero
@@ -169,7 +169,10 @@ func (d *Decoder) Decode(r SegmentReader) iter.Seq2[Frame, error] {
 // emit queues a frame. The payload is copied, since body points into a buffer that is reused.
 func (d *Decoder) emit(st *stream, body []byte, flags Flags) {
 	op := opcode(body)
-	flags |= d.lockFrame(st, op, flags)
+	if d.srv == nil {
+		d.hunt(st, op, flags)
+	}
+	flags |= st.dir
 	if flags&FromClient != 0 && !d.config.EmitClient {
 		return
 	}

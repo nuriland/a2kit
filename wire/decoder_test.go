@@ -273,6 +273,16 @@ func TestLock(t *testing.T) {
 	expectDir(t, d, "04 38 len=10 -\n05 38 len=10 server\n05 38 len=6 server\n")
 }
 
+// Known frames and combat from the client side do not turn the lock around.
+func TestLockHolds(t *testing.T) {
+	tick := slices.Repeat(wiretest.AppendFrame(nil, 0x00, 0x36, 2), 3)
+	d := NewDecoder(Config{})
+	feed(d, tick)
+	d.Feed(epoch, cli, srv, slices.Concat(tick, wiretest.AppendFrame(nil, 0x04, 0x38, 10)))
+	feed(d, wiretest.AppendFrame(nil, 0x33, 0x36, 4))
+	expectDir(t, d, "00 36 len=2 -\n00 36 len=2 -\n00 36 len=2 server\n33 36 len=4 server\n")
+}
+
 // Random bytes, and TLS records split across segments, do not lock; the game's stream does.
 func TestLockNoise(t *testing.T) {
 	var (

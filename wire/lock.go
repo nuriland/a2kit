@@ -25,26 +25,24 @@ func (d *Decoder) admit(k key, t time.Time) bool {
 	return false
 }
 
-// lockFrame counts a frame toward the lock and returns the stream's direction. Only known
+// hunt counts a frame toward the lock, and locks on its stream once it has earned it. Only known
 // opcodes count, on a stream off probation, and a resync resets the count. Three lock, as does a
-// combat opcode after one. A combat opcode from the client side reverses the pair.
-func (d *Decoder) lockFrame(st *stream, op Opcode, flags Flags) Flags {
+// combat opcode after one. Nothing counts once locked, so a lock never turns around: the
+// client's bodies are encrypted, and a known opcode on its side is chance.
+func (d *Decoder) hunt(st *stream, op Opcode, flags Flags) {
 	if flags&Resynced != 0 {
 		st.frames = 0
 	}
 	if !op.Known() || !st.fr.trusted() {
-		return st.dir
+		return
 	}
 	st.frames++
 	switch {
-	case d.srv == nil && combat(op) && st.frames >= 2:
+	case combat(op) && st.frames >= 2:
 		d.lock(st, "combat opcode")
-	case d.srv == nil && st.frames >= 3:
+	case st.frames >= 3:
 		d.lock(st, "3 known frames")
-	case st.dir == FromClient && combat(op) && st.frames >= 2:
-		d.lock(st, "combat from other side")
 	}
-	return st.dir
 }
 
 // lock makes st the server side and its reverse the client, and drops every other stream.
