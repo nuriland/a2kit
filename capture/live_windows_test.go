@@ -193,7 +193,7 @@ func TestQueueDropsWhenFull(t *testing.T) {
 	}
 }
 
-func TestCloseReportsWhatWasMissed(t *testing.T) {
+func TestCloseReportsWhatWentWrong(t *testing.T) {
 	l := newLive(0)
 	if err := l.Close(); err != nil {
 		t.Fatalf("Close of a capture that missed nothing = %v", err)
@@ -206,6 +206,53 @@ func TestCloseReportsWhatWasMissed(t *testing.T) {
 	err := l.Close()
 	if err == nil || !strings.Contains(err.Error(), "lost events 3 times") || !strings.Contains(err.Error(), "2 packets dropped") {
 		t.Errorf("Close = %v, want the lost events and the dropped packets", err)
+	}
+}
+
+func TestEveryCallsUntilTheCaptureEnds(t *testing.T) {
+	l := newLive(0)
+	calls := make(chan struct{}, 100)
+	stopped := make(chan struct{})
+	go func() {
+		l.every(time.Millisecond, func() error { calls <- struct{}{}; return nil })
+		close(stopped)
+	}()
+	for range 3 {
+		select {
+		case <-calls:
+		case <-time.After(5 * time.Second):
+			t.Fatal("not called again")
+		}
+	}
+	l.Close()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("still calling after Close")
+	}
+}
+
+func TestFailedFlushDoesNotEndTheCapture(t *testing.T) {
+	l := newLive(0)
+	l.flushErr = make(chan error, 1)
+	stopped := make(chan struct{})
+	go func() {
+		l.every(time.Millisecond, func() error { return errors.New("access denied") })
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("kept calling after an error")
+	}
+	select {
+	case <-l.done:
+		t.Error("a failed flush ended the capture")
+	default:
+	}
+	err := l.Close()
+	if err == nil || !strings.Contains(err.Error(), "flushing the ETW session failed") || !strings.Contains(err.Error(), "access denied") {
+		t.Errorf("Close = %v, want the failed flush", err)
 	}
 }
 

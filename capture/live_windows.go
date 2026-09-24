@@ -30,6 +30,9 @@ const (
 	pktmonQueue       = 8192 // packets the callback may have queued ahead of ReadSegment
 )
 
+// flushEvery is how often the ETW session is told to hand over what its buffers hold
+const flushEvery = 100 * time.Millisecond
+
 var (
 	propComponent = utf16Ptr("ComponentId")
 	propType      = utf16Ptr("PacketType")
@@ -59,6 +62,8 @@ type Live struct {
 	rec     *recorder // nil unless recording
 	dropped uint64    // packets the queue had no room for, counted by the callback
 
+	flushErr chan error // why flushing stopped, if it failed
+
 	closers  []closer // what OpenLive began; Close undoes it last first
 	closed   sync.Once
 	closeErr error
@@ -78,9 +83,10 @@ func OpenLive(name string) (*Live, error) {
 		return nil, err
 	}
 	l := &Live{
-		packets: make(chan pktmonPacket, pktmonQueue),
-		done:    make(chan struct{}),
-		comp:    comp,
+		packets:  make(chan pktmonPacket, pktmonQueue),
+		done:     make(chan struct{}),
+		flushErr: make(chan error, 1),
+		comp:     comp,
 	}
 	if err := l.start(); err != nil {
 		return nil, errors.Join(err, l.Close())
@@ -103,6 +109,7 @@ func (l *Live) start() error {
 		return fmt.Errorf("capture: pktmon: opening the event consumer: %w", err)
 	}
 	go l.watch()
+	go l.flush()
 
 	// pktmon logs to a file too, which nothing here reads. Give it a small one in a directory of
 	// its own, not PktMon.etl in the working directory.
@@ -160,7 +167,7 @@ func (l *Live) Record(w io.Writer) error {
 }
 
 // Close ends the capture, and may be called from any goroutine. It reports what it could not undo,
-// and what the capture missed.
+// and what went wrong on the way.
 func (l *Live) Close() error {
 	l.closed.Do(func() {
 		l.end(io.EOF)
@@ -170,7 +177,7 @@ func (l *Live) Close() error {
 				errs = append(errs, fmt.Errorf("capture: pktmon: %s: %w", c.what, err))
 			}
 		}
-		l.closeErr = errors.Join(errors.Join(errs...), l.missed())
+		l.closeErr = errors.Join(errors.Join(errs...), l.degraded())
 	})
 	return l.closeErr
 }
@@ -194,6 +201,33 @@ func (l *Live) watch() {
 	l.end(fmt.Errorf("capture: pktmon: event consumer: %w", err))
 }
 
+// flush tells the session to hand over its buffers every flushEvery, until the capture ends.
+func (l *Live) flush() {
+	name := l.session.TraceName()
+	name16 := utf16Ptr(name)
+	l.every(flushEvery, func() error {
+		// The call fills in its properties, so each gets new ones.
+		return etw.ControlTrace(0, name16, etw.NewRealTimeEventTraceSessionProperties(name), etw.EVENT_TRACE_CONTROL_FLUSH)
+	})
+}
+
+// every calls f at each interval until the capture ends. It stops at the first error, which Close reports
+func (l *Live) every(interval time.Duration, f func() error) {
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-l.done:
+			return
+		case <-tick.C:
+		}
+		if err := f(); err != nil {
+			l.flushErr <- err
+			return
+		}
+	}
+}
+
 // stopETW stops the session, and then the consumer. The session's end is what lets the trace end,
 // so the consumer, which waits for that, goes second.
 func (l *Live) stopETW() error {
@@ -212,16 +246,21 @@ func (l *Live) stopETW() error {
 	return err
 }
 
-// missed reports the packets the capture lost: ETW lost events before the callback saw them, or
-// the queue had no room. Neither ends the capture, since the decoder gives up the gap. It reads
-// what the callback counted, so it is for after the trace has stopped.
-func (l *Live) missed() error {
+// degraded reports what went wrong without ending the capture: packets lost, because ETW lost
+// events before the callback saw them or the queue had no room, and a flush that failed. The decoder
+// gives up the gaps. It reads what the callback counted, so it is for after the trace has stopped.
+func (l *Live) degraded() error {
 	var errs []error
 	if l.trace != nil && l.trace.LostEvents > 0 {
 		errs = append(errs, fmt.Errorf("capture: pktmon: ETW reported lost events %d times", l.trace.LostEvents))
 	}
 	if l.dropped > 0 {
 		errs = append(errs, fmt.Errorf("capture: pktmon: %d packets dropped, the queue was full", l.dropped))
+	}
+	select {
+	case err := <-l.flushErr:
+		errs = append(errs, fmt.Errorf("capture: pktmon: flushing the ETW session failed, so frames may have run seconds late: %w", err))
+	default:
 	}
 	return errors.Join(errs...)
 }
