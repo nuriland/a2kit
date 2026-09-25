@@ -1,0 +1,2 @@
+45 36 game.Player {Entity:14692 Name:Player Self:false}
+33 36 game.Player {Entity:15943 Name:Play Self:true}

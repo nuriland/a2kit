@@ -2,14 +2,17 @@
 //
 //	ts=1700000000006000000 opcode=04 38 len=41 flags=server src=10.0.0.2:13328 dst=10.0.0.1:10000
 //
-// With -events, it prints what the frames mean instead, as
-// game reads them:
+// With -events, it prints what each frame means instead, as game reads it, and the
+// payload of one game does not read, or reads off its layout:
 //
-//	ts=1700000000006000000 game.Hit {Actor:15943 Target:37365 Skill:11020000 Damage:41 Extra:[] Type:2 Scalar:10000 Mods:0 Direction:0}
+//	ts=1700000000006000000 04 38 Hit {Actor:15943 Target:37365 Skill:11020000 Damage:41 Extra:[] Type:2 Scalar:10000 Mods:0 Direction:0}
+//	ts=1700000000006000000 1D 37 Move e4 72 05 03 2b d5 bc c6 01 6f 24 c7
+//	ts=1700000000006000000 04 38 Hit c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b game: off the layout at byte 13 of 14
 package main
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -37,7 +40,7 @@ var (
 	logFile   = flag.String("log", "", "write the frames to an a2log `file`")
 	list      = flag.Bool("list", false, "list the devices that can be captured")
 	client    = flag.Bool("client", false, "print the client's frames too")
-	events    = flag.Bool("events", false, "print what the frames mean, as game reads them, instead of the frames")
+	events    = flag.Bool("events", false, "print what the frames mean, as game reads them")
 	verbose   = flag.Bool("v", false, "log what the decoder does")
 )
 
@@ -101,10 +104,10 @@ func run() (err error) {
 		defer behind.report()
 	}
 	emit := func(f wire.Frame) error {
-		if !*events {
+		if *events {
+			fmt.Fprintln(out, meaning(f))
+		} else {
 			fmt.Fprintln(out, f)
-		} else if e, ok := game.Parse(f); ok {
-			fmt.Fprintf(out, "ts=%d %T %+v\n", f.Time.UnixNano(), e, e)
 		}
 		if behind != nil {
 			behind.note(f)
@@ -188,6 +191,25 @@ func validateFlags() error {
 		return errors.New("-write records a live capture; add -live")
 	}
 	return nil
+}
+
+// meaning is the -events line for f. It prints the event game reads, or the payload it does not read,
+// with the error when the bytes are off the layout.
+func meaning(f wire.Frame) string {
+	name := "-"
+	if f.Flags&wire.FromClient == 0 {
+		name = cmp.Or(game.Name(f.Opcode), "-")
+	}
+	line := fmt.Sprintf("ts=%d %v %s", f.Time.UnixNano(), f.Opcode, name)
+	e, err := game.Parse(f)
+	switch {
+	case err == nil:
+		return fmt.Sprintf("%s %+v", line, e)
+	case errors.Is(err, game.ErrUnread):
+		return fmt.Sprintf("%s % x", line, f.Payload)
+	default:
+		return fmt.Sprintf("%s % x %v", line, f.Payload, err)
+	}
 }
 
 // untimed drops the time from log lines, since the frames carry their own.

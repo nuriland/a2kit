@@ -134,47 +134,47 @@ func TestViews(t *testing.T) {
 		want string
 	}{
 		{"table", func(w io.Writer) { s.table(w, nil, time.Second) }, summaryLine + `
-opcode  frames  share  payload  note
-1D 37   100     74.1%  11       background
-00 36   30      22.2%  8        known, background
-01 38   2       1.5%   7        -
-3B 38   2       1.5%   2        -
-35 38   1       0.7%   5        known
+opcode  name  frames  share  payload  note
+1D 37   Move  100     74.1%  11       background
+00 36   Tick  30      22.2%  8        known, background
+01 38   -     2       1.5%   7        -
+3B 38   -     2       1.5%   2        -
+35 38   -     1       0.7%   5        known
 `},
 		{"marks", func(w io.Writer) { s.table(w, marks("10s,20s"), time.Second) }, summaryLine + `
-opcode  frames  share  payload  note               marks  within  idle/s
-01 38   2       1.5%   7        -                  2/2    2       0.00
-3B 38   2       1.5%   2        -                  2/2    2       0.00
-00 36   30      22.2%  8        known, background  2/2    2       1.01
-1D 37   100     74.1%  11       background         2/2    7       3.35
-35 38   1       0.7%   5        known              1/2    1       0.00
+opcode  name  frames  share  payload  note               marks  within  idle/s
+01 38   -     2       1.5%   7        -                  2/2    2       0.00
+3B 38   -     2       1.5%   2        -                  2/2    2       0.00
+00 36   Tick  30      22.2%  8        known, background  2/2    2       1.01
+1D 37   Move  100     74.1%  11       background         2/2    7       3.35
+35 38   -     1       0.7%   5        known              1/2    1       0.00
 `},
 		// The windows overlap by half a second, so their frames count once and the idle time
 		// loses 1.5 s.
 		{"overlapping marks", func(w io.Writer) { s.table(w, marks("10s,10.5s"), time.Second) }, summaryLine + `
-opcode  frames  share  payload  note               marks  within  idle/s
-00 36   30      22.2%  8        known, background  2/2    2       0.99
-1D 37   100     74.1%  11       background         2/2    5       3.36
-01 38   2       1.5%   7        -                  1/2    1       0.04
-3B 38   2       1.5%   2        -                  1/2    1       0.04
-35 38   1       0.7%   5        known              0/2    0       0.04
+opcode  name  frames  share  payload  note               marks  within  idle/s
+00 36   Tick  30      22.2%  8        known, background  2/2    2       0.99
+1D 37   Move  100     74.1%  11       background         2/2    5       3.36
+01 38   -     2       1.5%   7        -                  1/2    1       0.04
+3B 38   -     2       1.5%   2        -                  1/2    1       0.04
+35 38   -     1       0.7%   5        known              0/2    0       0.04
 `},
 		// The window runs 29.2 s past the session, and covers only 0.8 s of it.
 		{"a mark near the end", func(w io.Writer) { s.table(w, marks("29s"), 30*time.Second) }, summaryLine + `
-opcode  frames  share  payload  note               marks  within  idle/s
-00 36   30      22.2%  8        known, background  1/1    1       1.00
-1D 37   100     74.1%  11       background         1/1    3       3.34
-35 38   1       0.7%   5        known              0/1    0       0.03
-01 38   2       1.5%   7        -                  0/1    0       0.07
-3B 38   2       1.5%   2        -                  0/1    0       0.07
+opcode  name  frames  share  payload  note               marks  within  idle/s
+00 36   Tick  30      22.2%  8        known, background  1/1    1       1.00
+1D 37   Move  100     74.1%  11       background         1/1    3       3.34
+35 38   -     1       0.7%   5        known              0/1    0       0.03
+01 38   -     2       1.5%   7        -                  0/1    0       0.07
+3B 38   -     2       1.5%   2        -                  0/1    0       0.07
 `},
 		{"a window over the whole session", func(w io.Writer) { s.table(w, marks("0s"), time.Minute) }, summaryLine + `
-opcode  frames  share  payload  note               marks  within  idle/s
-1D 37   100     74.1%  11       background         1/1    100     -
-00 36   30      22.2%  8        known, background  1/1    30      -
-01 38   2       1.5%   7        -                  1/1    2       -
-3B 38   2       1.5%   2        -                  1/1    2       -
-35 38   1       0.7%   5        known              1/1    1       -
+opcode  name  frames  share  payload  note               marks  within  idle/s
+1D 37   Move  100     74.1%  11       background         1/1    100     -
+00 36   Tick  30      22.2%  8        known, background  1/1    30      -
+01 38   -     2       1.5%   7        -                  1/1    2       -
+3B 38   -     2       1.5%   2        -                  1/1    2       -
+35 38   -     1       0.7%   5        known              1/1    1       -
 `},
 		{"anchors", func(w io.Writer) { s.anchors(w, time.Second) }, summaryLine + `; 00 36, 1D 37 come whether the player acts or not, and are left out
 at      client sent  server answered

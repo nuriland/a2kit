@@ -1,108 +1,66 @@
 package game
 
 import (
-	"encoding/binary"
-	"math"
+	"fmt"
 	"time"
-	"unicode/utf8"
 
 	"github.com/nuriland/a2kit/wire"
 )
 
-// Event is what one frame means, like a hit, a cast, a spawn, a death, a position update, or a clock tick
+// Event is what one frame means, like a hit, a cast, a spawn, a death, a position update, or a clock tick.
 type Event interface{ event() }
 
-// The opcodes Parse reads, in wire order.
-//
-// @TODO: add documentation for all available frames
-const (
-	opTick    wire.Opcode = 0x3600 // 00 36
-	opPing    wire.Opcode = 0x3603 // 03 36
-	opZone    wire.Opcode = 0x3623 // 23 36
-	opSelf    wire.Opcode = 0x3633 // 33 36
-	opSpawn   wire.Opcode = 0x3641 // 41 36
-	opDeath   wire.Opcode = 0x3642 // 42 36
-	opPlayer  wire.Opcode = 0x3645 // 45 36
-	opMoveA   wire.Opcode = 0x371A // 1A 37
-	opMoveB   wire.Opcode = 0x371B // 1B 37
-	opMoveC   wire.Opcode = 0x371C // 1C 37
-	opCast    wire.Opcode = 0x3802 // 02 38
-	opHit     wire.Opcode = 0x3804 // 04 38
-	opCastEnd wire.Opcode = 0x3806 // 06 38
-	opOwner   wire.Opcode = 0x8D04 // 04 8D
-)
-
-// dotnetEpoch is 0001-01-01 UTC in Unix milliseconds, the epoch of the client's clock
+// dotnetEpoch is 0001-01-01 UTC in Unix milliseconds, the epoch of the client's clock.
 const dotnetEpoch = -62135596800000
 
-// Parse reads what f means. It reports false for a frame it does not know
-func Parse(f wire.Frame) (Event, bool) {
+// Parse reads what f means, or fails with ErrUnread or ErrLayout.
+func Parse(f wire.Frame) (Event, error) {
 	if f.Flags&wire.FromClient != 0 {
-		return nil, false
+		return nil, ErrUnread
 	}
-	var (
-		e Event = nil
-		r       = reader{p: f.Payload}
-	)
-	switch f.Opcode {
-	case opHit:
-		e = r.hit()
-	case opSpawn:
-		e = r.spawn()
-	case opDeath:
-		e = r.death()
-	case opOwner:
-		e = r.owner()
-	case opPlayer, opSelf:
-		e = r.player(f.Opcode == opSelf)
-	case opCast:
-		e = r.cast()
-	case opCastEnd:
-		e = r.castEnd()
-	case opMoveA, opMoveB, opMoveC:
-		e = r.move(f.Opcode == opMoveA)
-	case opTick:
-		e = r.tick()
-	case opPing:
-		e = r.ping()
-	case opZone:
-		e = r.zone()
-	default:
-		return nil, false
+	o := opcodes[f.Opcode]
+	if o.read == nil {
+		return nil, ErrUnread
 	}
-	if r.bad || e == nil {
-		return nil, false
+	r := reader{p: f.Payload}
+	e := o.read(&r)
+	if r.bad {
+		return nil, fmt.Errorf("%w at byte %d of %d", ErrLayout, r.i, len(r.p))
 	}
-	return e, true
+	if e == nil {
+		return nil, ErrUnread
+	}
+	return e, nil
 }
 
+// hit parses a hit event from a frame
 func (r *reader) hit() Event {
 	var (
-		h  = Hit{Target: r.varint()}
+		h  = Hit{Target: r.entity()}
 		sw = r.varint()
 	)
-
-	r.varint()
-	h.Actor = r.varint()
-	h.Skill = r.u32()
-	r.skip(1)
+	r.varint() // 0 so far
+	h.Actor = r.entity()
+	h.Skill = r.skill()
+	r.skip(1) // the actor's hit count
 	h.Type = r.small()
 	switch sw & 0xF {
 	case 4:
 	case 6:
 		h.Mods = r.u8()
-		r.skip(1)
+		r.skip(1) // 00
 		h.Direction = r.u8()
 	default:
 		return nil // a form no fixture has
 	}
-	r.skip(4)
+	r.skip(4) // varies with the skill, not a float
 	seq := r.u32()
 	h.Scalar = r.varint()
 	h.Damage = r.varint()
 	if sw&0x20 != 0 {
 		n := r.varint()
-		if n > uint32(len(r.p)-r.i) {
+		if n > uint32(r.left()) {
+			r.bad = true
 			return nil
 		}
 		h.Extra = make([]uint32, n)
@@ -110,180 +68,124 @@ func (r *reader) hit() Event {
 			h.Extra[i] = r.varint()
 		}
 	}
-	if seq > 255 || r.u8() != byte(seq) || r.u8() != 0 || !r.done() {
-		return nil
+	if seq > 255 || r.u8() != byte(seq) || r.u8() != 0 {
+		r.bad = true
 	}
+	r.end()
 	return h
 }
 
+// spawn parses a spawn event from a frame
 func (r *reader) spawn() Event {
-	s := Spawn{Entity: r.varint(), Mask: r.u32()}
+	s := Spawn{Entity: r.entity(), Mask: r.u32()}
 	if r.u8()&1 != 0 {
-		return nil // a name follows, which no fixture has, @TODO: add support for this
+		return nil // a name follows; no fixture
 	}
-	s.NPC = r.u32()
+	s.NPC = r.npc()
 	r.skip(2)
-	s.X, s.Y, s.Z = r.f32(), r.f32(), r.f32()
+	s.Pos = r.pos()
 	return s
 }
 
+// death parses a death event from a frame
 func (r *reader) death() Event {
-	d := Death{Entity: r.varint()}
+	d := Death{Entity: r.entity()}
 	if r.varint() != 0 {
-		return nil
+		r.bad = true
 	}
 	d.Flag = r.small()
-	if !r.done() {
-		return nil
-	}
+	r.end()
 	return d
 }
 
+// owner parses an owner event from a frame
 func (r *reader) owner() Event {
-	o := Owner{Entity: r.varint(), Skill: r.u32(), Actor: r.varint()}
-	r.varint()
+	o := Owner{Entity: r.entity(), Skill: r.skill(), Actor: r.entity()}
+	r.varint() // 504 so far
 	o.Name = r.name()
 	return o
 }
 
-func (r *reader) player(self bool) Event {
-	p := Player{Entity: r.varint(), Self: self}
-	r.skip(4)
+// player parses a player event from a frame
+func (r *reader) player() Event { return r.character(false) }
+
+// self parses a self event from a frame
+func (r *reader) self() Event { return r.character(true) }
+
+// character parses a character event from a frame
+func (r *reader) character(self bool) Event {
+	p := Player{Entity: r.entity(), Self: self}
+	r.skip(4) // a mask, like Spawn's
 	if r.u8()&1 != 0 {
 		p.Name = r.name()
 	}
 	return p
 }
 
+// cast parses a cast event from a frame
 func (r *reader) cast() Event {
-	c := Cast{Actor: r.varint()}
+	c := Cast{Actor: r.entity()}
 	r.skip(1)
-	c.Skill = r.u32()
+	c.Skill = r.skill()
 	r.skip(2)
-	c.Target = r.varint()
+	c.Target = r.entity()
+	if r.left() < 16 {
+		return nil // the short self-cast form, without a position
+	}
 	r.skip(4)
-	c.X, c.Y, c.Z = r.f32(), r.f32(), r.f32()
+	c.Pos = r.pos()
 	return c
 }
 
+// castEnd parses a cast end event from a frame
 func (r *reader) castEnd() Event {
-	c := CastEnd{Actor: r.varint(), Skill: r.u32()}
+	c := CastEnd{Actor: r.entity(), Skill: r.skill()}
 	r.skip(2)
-	if !r.done() {
-		return nil
-	}
+	r.end()
 	return c
 }
 
-// move reads 1A 37, or with a false arg, 1B 37 and 1C 37, whose prefix byte may add one more
-func (r *reader) move(a bool) Event {
-	m := Move{Entity: r.varint()}
-	if a {
-		r.skip(2)
-	} else if r.u8()&1 != 0 {
-		r.skip(1)
-	}
-	m.X, m.Y, m.Z = r.f32(), r.f32(), r.f32()
+// moveA parses a move event from a frame
+func (r *reader) moveA() Event {
+	m := Move{Entity: r.entity()}
+	r.skip(2)
+	m.Pos = r.pos()
 	return m
 }
 
+// moveB parses a move event from a frame
+func (r *reader) moveB() Event {
+	m := Move{Entity: r.entity()}
+	if r.u8()&1 != 0 {
+		r.skip(1)
+	}
+	m.Pos = r.pos()
+	return m
+}
+
+// tick parses a tick event from a frame
 func (r *reader) tick() Event {
 	t := Tick{Server: unixMilli(int64(r.u64()))}
-	if !r.done() {
-		return nil
-	}
+	r.end()
 	return t
 }
 
+// ping parses a ping event from a frame
 func (r *reader) ping() Event {
-	r.skip(2)
+	r.skip(2) // 00 00
 	p := Ping{Client: unixMilli(int64(r.u64()) + dotnetEpoch), Server: unixMilli(int64(r.u64()))}
-	if !r.done() {
-		return nil
-	}
+	r.end()
 	return p
 }
 
+// zone parses a zone event from a frame
 func (r *reader) zone() Event {
 	if r.varint() != 0 {
-		return nil
+		r.bad = true
 	}
 	r.skip(5)
-	return Zone{X: r.f32(), Y: r.f32(), Z: r.f32()}
+	return Zone{Pos: r.pos()}
 }
 
+// unixMilli converts a Unix milliseconds timestamp to a time.Time in UTC.
 func unixMilli(ms int64) time.Time { return time.UnixMilli(ms).UTC() }
-
-// reader reads a payload front to back. A read past the end sets bad and returns zero
-//
-// @TODO: cleanup the whole reader
-type reader struct {
-	p   []byte
-	i   int
-	bad bool
-}
-
-func (r *reader) take(n int) []byte {
-	if r.i+n > len(r.p) {
-		r.bad, r.i = true, len(r.p)
-		return nil
-	}
-	b := r.p[r.i : r.i+n]
-	r.i += n
-	return b
-}
-
-func (r *reader) skip(n int) { r.take(n) }
-func (r *reader) done() bool { return r.i == len(r.p) }
-
-func (r *reader) u8() byte {
-	if b := r.take(1); b != nil {
-		return b[0]
-	}
-	return 0
-}
-
-func (r *reader) u32() uint32 {
-	if b := r.take(4); b != nil {
-		return binary.LittleEndian.Uint32(b)
-	}
-	return 0
-}
-
-func (r *reader) u64() uint64 {
-	if b := r.take(8); b != nil {
-		return binary.LittleEndian.Uint64(b)
-	}
-	return 0
-}
-
-func (r *reader) f32() float32 { return math.Float32frombits(r.u32()) }
-
-// varint reads a LEB128 value of at most five bytes.
-func (r *reader) varint() uint32 {
-	v, n := binary.Uvarint(r.p[r.i:])
-	if n <= 0 || n > 5 || v > math.MaxUint32 {
-		r.bad, r.i = true, len(r.p)
-		return 0
-	}
-	r.i += n
-	return uint32(v)
-}
-
-// small reads a varint that has to fit a byte.
-func (r *reader) small() byte {
-	v := r.varint()
-	if v > 255 {
-		r.bad = true
-	}
-	return byte(v)
-}
-
-// name reads a length byte and that much UTF-8.
-func (r *reader) name() string {
-	b := r.take(int(r.u8()))
-	if !utf8.Valid(b) {
-		r.bad = true
-	}
-	return string(b)
-}

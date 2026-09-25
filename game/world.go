@@ -1,32 +1,30 @@
 package game
 
-// Spawn announces a mob or summon entering view, from 41 36. NPC is its type id
+// Spawn announces a mob or summon entering view
 type Spawn struct {
-	Entity  uint32
-	Mask    uint32 // its low byte varies with the kind of entity
-	NPC     uint32
-	X, Y, Z float32
+	Entity Entity
+	NPC    NPC
+	Mask   uint32 // its low byte varies with the kind of entity
+	Pos
 }
 
-// Player announces a player entering view, from 45 36, or the client's own character, from 33 36.
+// Player announces a player entering view
 type Player struct {
-	Entity uint32
+	Entity Entity
 	Name   string
 	Self   bool
 }
 
-// Move is an entity's position update, from 1A 37, 1B 37 and/or 1C 37.
+// Move is an entity's position update
 //
 // @TODO: still not fully understood, revisit later
 type Move struct {
-	Entity  uint32
-	X, Y, Z float32
+	Entity Entity
+	Pos
 }
 
-// Zone places the client's character in the world after a zone change, from 23 36.
-type Zone struct {
-	X, Y, Z float32
-}
+// Zone places the client's character in the world after a zone change
+type Zone struct{ Pos }
 
 func (Spawn) event()  {}
 func (Player) event() {}

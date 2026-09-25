@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/nuriland/a2kit/game"
 	"github.com/nuriland/a2kit/wire"
 )
 
@@ -77,14 +78,14 @@ func (s *session) table(w io.Writer, marks []time.Time, window time.Duration) {
 	)
 
 	fmt.Fprintln(w, s.summary())
-	fmt.Fprint(tw, "opcode\tframes\tshare\tpayload\tnote")
+	fmt.Fprint(tw, "opcode\tname\tframes\tshare\tpayload\tnote")
 	if len(marks) > 0 {
 		fmt.Fprint(tw, "\tmarks\twithin\tidle/s")
 	}
 	fmt.Fprintln(tw)
 
 	for _, st := range rows {
-		fmt.Fprintf(tw, "%v\t%d\t%.1f%%\t%s\t%s", st.op, st.n, 100*float64(st.n)/float64(len(s.frames)), sizes(st.sizes), note(st.op, s.background[st.op]))
+		fmt.Fprintf(tw, "%v\t%s\t%d\t%.1f%%\t%s\t%s", st.op, cmp.Or(game.Name(st.op), "-"), st.n, 100*float64(st.n)/float64(len(s.frames)), sizes(st.sizes), note(st.op, s.background[st.op]))
 		if len(marks) > 0 {
 			rate := "-" // no idle time to rate against
 			if idle > 0 {
