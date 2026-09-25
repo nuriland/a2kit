@@ -32,6 +32,6 @@ func Example() {
 	}
 	// Output:
 	// pcap fight.pcap by github.com/nuriland/a2kit@v0.1.0
-	// +0ms 04 38 3 bytes [server]
-	// +51ms 33 36 0 bytes [server lz4]
+	// +0ms 04 38 3 bytes server
+	// +51ms 33 36 0 bytes server,lz4
 }

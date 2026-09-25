@@ -1,8 +1,10 @@
 package wire
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 )
@@ -40,18 +42,36 @@ func (f Frame) String() string {
 
 // String is "server,lz4,bundled", or "-" for none.
 func (f Flags) String() string {
-	var b strings.Builder
+	if names := f.names(); len(names) > 0 {
+		return strings.Join(names, ",")
+	}
+	return "-"
+}
+
+// MarshalJSON is the list of names, ["server","lz4"], and [] for none.
+func (f Flags) MarshalJSON() ([]byte, error) { return json.Marshal(f.names()) }
+
+// UnmarshalJSON reads the list MarshalJSON writes. It drops a name it does not know.
+func (f *Flags) UnmarshalJSON(b []byte) error {
+	var names []string
+	if err := json.Unmarshal(b, &names); err != nil {
+		return err
+	}
+	*f = 0
+	for _, name := range names {
+		if i := slices.Index(flagNames[:], name); i >= 0 {
+			*f |= 1 << i
+		}
+	}
+	return nil
+}
+
+func (f Flags) names() []string {
+	names := []string{}
 	for i, name := range flagNames {
-		if f&(1<<i) == 0 {
-			continue
+		if f&(1<<i) != 0 {
+			names = append(names, name)
 		}
-		if b.Len() > 0 {
-			b.WriteByte(',')
-		}
-		b.WriteString(name)
 	}
-	if b.Len() == 0 {
-		return "-"
-	}
-	return b.String()
+	return names
 }

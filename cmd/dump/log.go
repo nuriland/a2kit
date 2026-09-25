@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"runtime/debug"
-	"strings"
-	"time"
 
 	"github.com/nuriland/a2kit/a2log"
 	"github.com/nuriland/a2kit/wire"
@@ -25,7 +23,7 @@ func (l *log) write(f wire.Frame) error {
 		}
 		l.begun = true
 	}
-	return l.enc.Encode(frame(f, l.hdr.T0))
+	return l.enc.Encode(a2log.NewFrame(f, l.hdr.T0))
 }
 
 // end writes the header if no frame has.
@@ -34,27 +32,6 @@ func (l *log) end() error {
 		return nil
 	}
 	return l.enc.Encode(l.hdr)
-}
-
-// frame is f as the log writes it, its time as milliseconds after t0.
-func frame(f wire.Frame, t0 time.Time) a2log.Frame {
-	return a2log.Frame{
-		T:       f.Time.Sub(t0).Milliseconds(),
-		Opcode:  f.Opcode.String(),
-		Flags:   flags(f.Flags),
-		Src:     f.Src.String(),
-		Dst:     f.Dst.String(),
-		Payload: f.Payload,
-	}
-}
-
-// flags lists the names Flags.String joins, [] for none.
-func flags(f wire.Flags) []string {
-	s := f.String()
-	if s == "-" {
-		return []string{}
-	}
-	return strings.Split(s, ",")
 }
 
 // header describes this run: the source decoded, and the build that wrote it.

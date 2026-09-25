@@ -2,6 +2,7 @@ package wire
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 )
 
@@ -16,6 +17,22 @@ func (o Opcode) Bytes() [2]byte { return [2]byte{byte(o), byte(o >> 8)} }
 
 // String is the opcode in wire order, "04 38".
 func (o Opcode) String() string { return fmt.Sprintf("%02X %02X", byte(o), byte(o>>8)) }
+
+// MarshalText is String.
+func (o Opcode) MarshalText() ([]byte, error) { return []byte(o.String()), nil }
+
+// UnmarshalText reads the form String writes, "04 38", in either case.
+func (o *Opcode) UnmarshalText(b []byte) error {
+	var p [2]byte
+	if len(b) != 5 || b[2] != ' ' {
+		return fmt.Errorf("wire: opcode %q is not two hex bytes, like \"04 38\"", b)
+	}
+	if _, err := hex.Decode(p[:], []byte{b[0], b[1], b[3], b[4]}); err != nil {
+		return fmt.Errorf("wire: opcode %q: %w", b, err)
+	}
+	*o = opcode(p[:])
+	return nil
+}
 
 // Known reports whether o is in the table of known opcodes.
 func (o Opcode) Known() bool { return knownBits[o>>6]&(1<<(o&63)) != 0 }
