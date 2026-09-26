@@ -2,6 +2,10 @@
 //
 //	ts=1700000000006000000 opcode=04 38 len=41 flags=server src=10.0.0.2:13328 dst=10.0.0.1:10000
 //
+// The first few frames of a session come before dump has picked out the game's connection,
+// so they aren't marked as either the server or the client, instead they show flags=- when they have no other flag.
+// Check the src field to see which side sent them
+//
 // With -events, it prints a JSON line for each frame instead.
 // The event the game reads, or the payload of a frame it does not read, with the error when the bytes are off the layout
 //
