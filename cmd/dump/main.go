@@ -137,7 +137,11 @@ func run() (err error) {
 			return err
 		}
 		defer f.Close()
-		return decode(d, f, emit)
+		err = decode(d, f, emit)
+		if n := f.CutShort(); n > 0 {
+			fmt.Fprintf(os.Stderr, "dump: the capture cut %d TCP segments short, and the bytes cut are lost; pktmon needs --pkt-size 0\n", n)
+		}
+		return err
 	case *live:
 		return runLive(d, emit)
 	}

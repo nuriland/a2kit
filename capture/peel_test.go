@@ -14,6 +14,7 @@ import (
 
 var (
 	src4       = netip.MustParseAddrPort("10.0.0.2:13328")
+	src8       = netip.MustParseAddrPort("8.0.0.2:13328") // its packets' bytes 12 and 13 read 08 00, IPv4's EtherType
 	dst4       = netip.MustParseAddrPort("10.0.0.1:10000")
 	src6       = netip.MustParseAddrPort("[2001:db8::2]:13328")
 	dst6       = netip.MustParseAddrPort("[2001:db8::1]:10000")
@@ -39,11 +40,13 @@ func TestPeel(t *testing.T) {
 		fragment = slices.Clone(ip4)
 		udp      = slices.Clone(ip4)
 		arp      = wiretest.Ethernet(ip4)
+		arp45    = wiretest.Ethernet(ip4) // to a MAC whose first byte reads as IPv4
 	)
 
 	fragment[6] = 0x20 // more fragments
 	udp[9] = 17
 	arp[12], arp[13] = 0x08, 0x06
+	arp45[0], arp45[12], arp45[13] = 0x45, 0x08, 0x06
 
 	tests := []struct {
 		name     string
@@ -64,10 +67,14 @@ func TestPeel(t *testing.T) {
 		{"linux sll2", linkLinuxSLL2, sll2, src6, "frame"},
 		{"raw", 101, ip4, src4, "frame"},
 		{"raw ipv6", 229, ip6, src6, "frame"},
+		{"bare ip said to be ethernet", linkEthernet, ip4, src4, "frame"},
+		{"bare ipv6 said to be ethernet", linkEthernet, ip6, src6, "frame"},
+		{"bare ip that reads as ethernet", linkEthernet, wiretest.TCP(src8, dst4, 7, 9, byte(wire.ACK), payload), src8, "frame"},
 		{"cut by snaplen", linkEthernet, wiretest.Ethernet(ip4)[:14+40+3], src4, "fra"},
 		{"fragment", linkEthernet, wiretest.Ethernet(fragment), netip.AddrPort{}, ""},
 		{"udp", linkEthernet, wiretest.Ethernet(udp), netip.AddrPort{}, ""},
 		{"arp", linkEthernet, arp, netip.AddrPort{}, ""},
+		{"arp to a mac of 45", linkEthernet, arp45, netip.AddrPort{}, ""},
 		{"no tcp header", linkEthernet, wiretest.Ethernet(ip4)[:14+30], netip.AddrPort{}, ""},
 		{"runt", linkEthernet, []byte{1, 2, 3}, netip.AddrPort{}, ""},
 		{"empty", 101, nil, netip.AddrPort{}, ""},

@@ -20,8 +20,21 @@ const (
 )
 
 // peel strips a packet down to TCP, and reports false for anything else.
+//
+// A file that says Ethernet may still hold bare IP.
+//
+// pktmon's etl2pcap writes every component under one Ethernet interface, including a VPN tunnel, whose packets have no link header.
+// So an Ethernet packet that is not TCP is tried again as raw IP.
 func peel(linkType int, p []byte) (wire.Segment, bool) {
-	ip, version := network(linkType, p)
+	s, ok := segment(network(linkType, p))
+	if !ok && linkType == linkEthernet {
+		s, ok = segment(network(linkRaw, p))
+	}
+	return s, ok
+}
+
+// segment reads the TCP segment in an IP packet of the given version, and reports false for anything else.
+func segment(ip []byte, version int) (wire.Segment, bool) {
 	var tcp []byte
 	var src, dst netip.Addr
 	switch version {

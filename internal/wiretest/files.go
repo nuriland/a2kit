@@ -30,16 +30,19 @@ func NewPcap(order binary.AppendByteOrder, nano bool, linkType int) *Pcap {
 	return p
 }
 
-func (p *Pcap) Add(t time.Time, data []byte) {
+func (p *Pcap) Add(t time.Time, data []byte) { p.AddCut(t, data, len(data)) }
+
+// AddCut adds the first n bytes of data, as a capture with a snap length of n would.
+func (p *Pcap) AddCut(t time.Time, data []byte, n int) {
 	frac := t.Nanosecond() / 1000
 	if p.nano {
 		frac = t.Nanosecond()
 	}
 	p.b = p.order.AppendUint32(p.b, uint32(t.Unix()))
 	p.b = p.order.AppendUint32(p.b, uint32(frac))
+	p.b = p.order.AppendUint32(p.b, uint32(n))
 	p.b = p.order.AppendUint32(p.b, uint32(len(data)))
-	p.b = p.order.AppendUint32(p.b, uint32(len(data)))
-	p.b = append(p.b, data...)
+	p.b = append(p.b, data[:n]...)
 }
 
 func (p *Pcap) Bytes() []byte { return p.b }
@@ -91,15 +94,18 @@ func (p *Pcapng) Interface(linkType int, res byte, offset int64) int {
 }
 
 // Packet adds an enhanced packet block on interface id.
-func (p *Pcapng) Packet(id int, t time.Time, data []byte) {
+func (p *Pcapng) Packet(id int, t time.Time, data []byte) { p.PacketCut(id, t, data, len(data)) }
+
+// PacketCut adds the first n bytes of data, as a capture with a snap length of n would.
+func (p *Pcapng) PacketCut(id int, t time.Time, data []byte, n int) {
 	ticks := p.ifaces[id].ticks(t)
 	var body []byte
 	body = p.order.AppendUint32(body, uint32(id))
 	body = p.order.AppendUint32(body, uint32(ticks>>32))
 	body = p.order.AppendUint32(body, uint32(ticks))
+	body = p.order.AppendUint32(body, uint32(n))
 	body = p.order.AppendUint32(body, uint32(len(data)))
-	body = p.order.AppendUint32(body, uint32(len(data)))
-	body = append(body, data...)
+	body = append(body, data[:n]...)
 	p.Block(6, body)
 }
 

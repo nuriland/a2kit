@@ -53,12 +53,14 @@ func (d *Decoder) lock(st *stream, why string) {
 	if peer != nil {
 		peer.dir = FromClient
 	}
+	dropped := 0
 	for _, o := range d.streams {
 		if o != st && o != peer {
 			d.drop(o)
+			dropped++
 		}
 	}
-	d.log.Info("flow locked", "src", st.key.src, "dst", st.key.dst, "why", why)
+	d.log.Info("flow locked", "src", st.key.src, "dst", st.key.dst, "why", why, "dropped", dropped)
 }
 
 // unlock returns the decoder to hunting.

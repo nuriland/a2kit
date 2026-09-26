@@ -53,7 +53,6 @@ func TestSample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := lines(fs, true)
 
 	// The segment sent third, at 6 ms, fills the gap and completes the first two frames. The last
 	// two came wholly in the segment sent second, and keep its time.
@@ -64,8 +63,28 @@ func TestSample(t *testing.T) {
 	if want := []int64{6e6, 6e6, 5e6, 5e6}; !slices.Equal(times, want) {
 		t.Errorf("stamped %v ns past the start, want %v", times, want)
 	}
+	expect(t, fs, "testdata/sample.expect.json")
+}
 
-	b, err := os.ReadFile("testdata/sample.expect.json")
+// The start of a session as pktmon's etl2pcap wrote it: one Ethernet interface, and on it the
+// game's packets as bare IP, since they crossed a VPN's tunnel. The addresses are replaced.
+func TestPktmon(t *testing.T) {
+	f, err := Open("testdata/pktmon.pcapng")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	fs, err := decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(t, fs, "testdata/pktmon.expect.json")
+}
+
+// expect compares frames with the file that lists them, each from 10.0.0.2:13328 to 10.0.0.1:10000.
+func expect(t *testing.T, fs []wire.Frame, name string) {
+	t.Helper()
+	b, err := os.ReadFile(name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +101,7 @@ func TestSample(t *testing.T) {
 		fmt.Fprintf(&want, "opcode=%s len=%d flags=%s src=10.0.0.2:13328 dst=10.0.0.1:10000\n",
 			w.Opcode, w.PayloadLen, w.Flags)
 	}
-	if got != want.String() {
+	if got := lines(fs, true); got != want.String() {
 		t.Errorf("frames:\n%swant:\n%s", got, want.String())
 	}
 }
@@ -209,7 +228,46 @@ func TestFormats(t *testing.T) {
 			if g, w := lines(got, tt.timeless), lines(want, tt.timeless); g != w {
 				t.Errorf("frames:\n%swant:\n%s", g, w)
 			}
+			if n := r.CutShort(); n != 0 {
+				t.Errorf("%d segments cut short, want 0", n)
+			}
 		})
+	}
+}
+
+// Every segment the capture cut short is counted. The sample holds only TCP.
+func TestCutShort(t *testing.T) {
+	sample, err := os.ReadFile("testdata/sample.pcap")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const snap = 14 + 20 + 20 + 10 // the headers and ten bytes of payload
+	var (
+		pcap = wiretest.NewPcap(binary.LittleEndian, true, linkEthernet)
+		ng   = wiretest.NewPcapng(binary.LittleEndian)
+		want = 0
+	)
+	ng.Interface(linkEthernet, 9, 0)
+	for _, p := range packets(t, sample) {
+		n := min(len(p.data), snap)
+		if n < len(p.data) {
+			want++
+		}
+		pcap.AddCut(p.time, p.data, n)
+		ng.PacketCut(0, p.time, p.data, n)
+	}
+
+	for _, file := range [][]byte{pcap.Bytes(), ng.Bytes()} {
+		r, err := NewReader(bytes.NewReader(file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := decode(r); err != nil {
+			t.Fatal(err)
+		}
+		if n := r.CutShort(); n != want {
+			t.Errorf("%d segments cut short, want %d", n, want)
+		}
 	}
 }
 
@@ -251,10 +309,15 @@ func FuzzReader(f *testing.F) {
 	if err != nil {
 		f.Fatal(err)
 	}
+	pktmon, err := os.ReadFile("testdata/pktmon.pcapng")
+	if err != nil {
+		f.Fatal(err)
+	}
 	ng := wiretest.NewPcapng(binary.LittleEndian)
 	ng.Interface(linkEthernet, 9, 0)
 	ng.Packet(0, packetTime, wiretest.Ethernet(wiretest.TCP(src4, dst4, 1, 0, 0x18, []byte("frame"))))
 	f.Add(sample)
+	f.Add(pktmon)
 	f.Add(ng.Bytes())
 	f.Fuzz(func(t *testing.T, b []byte) {
 		r, err := NewReader(bytes.NewReader(b))

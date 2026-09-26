@@ -211,6 +211,7 @@ func (n *pcapng) packetBlock(b []byte, obsolete bool) (packet, error) {
 		time:     in.time(n.order.Uint32(b[4:]), n.order.Uint32(b[8:])),
 		linkType: in.linkType,
 		ifIndex:  int(id),
+		orig:     int(n.order.Uint32(b[16:])),
 		data:     b[20 : 20+size],
 	}, nil
 }
@@ -226,9 +227,10 @@ func (n *pcapng) simpleBlock(b []byte) (packet, error) {
 	}
 
 	in := n.ifaces[0]
-	size := min(int(n.order.Uint32(b[0:])), len(b)-4)
+	orig := int(n.order.Uint32(b[0:]))
+	size := min(orig, len(b)-4)
 	if in.snapLen > 0 {
 		size = min(size, in.snapLen)
 	}
-	return packet{time: time.Unix(0, 0), linkType: in.linkType, data: b[4 : 4+size]}, nil
+	return packet{time: time.Unix(0, 0), linkType: in.linkType, orig: orig, data: b[4 : 4+size]}, nil
 }

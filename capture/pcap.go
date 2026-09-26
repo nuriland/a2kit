@@ -59,6 +59,7 @@ func (p *classic) next() (packet, error) {
 	sec := p.order.Uint32(p.head[0:])
 	frac := p.order.Uint32(p.head[4:])
 	n := p.order.Uint32(p.head[8:])
+	orig := p.order.Uint32(p.head[12:])
 	if n > maxSnap {
 		return packet{}, fmt.Errorf("packet length %d exceeds %d", n, maxSnap)
 	}
@@ -69,6 +70,7 @@ func (p *classic) next() (packet, error) {
 	return packet{
 		time:     time.Unix(int64(sec), int64(frac)*p.tick),
 		linkType: p.linkType,
+		orig:     int(orig),
 		data:     p.data,
 	}, nil
 }

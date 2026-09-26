@@ -28,7 +28,8 @@ type Device struct {
 
 // Reader reads a pcap or pcapng capture.
 type Reader struct {
-	c container
+	c   container
+	cut int // segments cut short
 }
 
 // container is a file format: classic pcap, or pcapng.
@@ -40,6 +41,7 @@ type packet struct {
 	time     time.Time
 	linkType int
 	ifIndex  int
+	orig     int    // its length on the wire, which data falls short of if the capture cut it
 	data     []byte // the container's buffer, until the next call
 }
 
@@ -49,7 +51,7 @@ func NewReader(r io.Reader) (*Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("capture: %w", err)
 	}
-	return &Reader{c}, nil
+	return &Reader{c: c}, nil
 }
 
 func newContainer(r io.Reader) (container, error) {
@@ -76,11 +78,18 @@ func (r *Reader) ReadSegment() (wire.Segment, error) {
 			return wire.Segment{}, fmt.Errorf("capture: %w", err)
 		}
 		if s, ok := peel(p.linkType, p.data); ok {
+			if len(p.data) < p.orig {
+				r.cut++
+			}
 			s.Time, s.IfIndex = p.time, p.ifIndex
 			return s, nil
 		}
 	}
 }
+
+// CutShort returns how many of the segments read so far the capture cut short of their length on
+// the wire, as a snap length does. The decoder takes the bytes cut for a gap in the stream.
+func (r *Reader) CutShort() int { return r.cut }
 
 // File is a Reader that closes its file.
 type File struct {
@@ -99,7 +108,7 @@ func Open(name string) (*File, error) {
 		f.Close()
 		return nil, fmt.Errorf("capture: %s: %w", name, err)
 	}
-	return &File{Reader{c}, f}, nil
+	return &File{Reader{c: c}, f}, nil
 }
 
 func (f *File) Close() error { return f.f.Close() }

@@ -107,7 +107,7 @@ func (d *Decoder) stream(k key, t time.Time) *stream {
 	st := &stream{key: k, last: t, born: d.born}
 	st.fr = framer{
 		knownOnly: d.config.KnownOnly,
-		log:       d.log,
+		log:       d.log.With("src", k.src, "dst", k.dst),
 		emit:      func(body []byte, flags Flags) { d.emit(st, body, flags) },
 	}
 	if d.srv != nil {
@@ -222,7 +222,7 @@ func (d *Decoder) skip(st *stream, seq uint32) {
 	if len(st.held) > 0 && after(seq, st.held[0].seq) {
 		to = st.held[0].seq
 	}
-	d.log.Warn("tcp gap lost", "bytes", to-st.next)
+	st.fr.log.Warn("tcp gap lost", "bytes", to-st.next)
 	st.fr.lose(int(to - st.next))
 	st.next = to
 	d.release(st)

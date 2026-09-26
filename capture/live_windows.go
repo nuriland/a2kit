@@ -333,10 +333,7 @@ func tcpPacket(t time.Time, component int, packetType uint32, data []byte) (pktm
 		return pktmonPacket{}, false
 	}
 	ip, version := network(link, data)
-	if version == 0 {
-		return pktmonPacket{}, false
-	}
-	seg, ok := peel(linkRaw, ip)
+	seg, ok := segment(ip, version)
 	if !ok {
 		return pktmonPacket{}, false
 	}
