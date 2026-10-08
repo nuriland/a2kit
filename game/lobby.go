@@ -19,25 +19,35 @@ type Servers struct {
 //   - Players changes by a tiny margin, up and down, each time the lobby sends the list again, every 10 s.
 //   - It has always been well below Capacity, at most 4636 of 8000 so far from what we've seen.
 //   - Capacity differs from server to server, from 2000 to 8000, and the smallest is the newest server.
+//   - Since the October 2026 patch, the list carries one byte, Load, in place of both.
+//     It is close to the old ratio on the servers seen both ways, 43% then 40 on LIVE_Light_001, so likely a percentage.
 type Server struct {
 	ID       uint16
 	Name     string // like LIVE_Light_001, @TODO: maybe offload server ID->name resolution to aion2-api (https://github.com/nuriland/aion2-api) for better UX
 	Faction  byte   // 1 on the Light (Elyos) servers, 2 on the Dark (Asmodians) ones
-	Mask     byte   // its two bits of the byte before every fourth server's Status
-	Status   byte   // what the game marks the server as, either StatusRecommended, StatusRestricted, or 0
-	Players  uint32 // likely how many play on it, always below Capacity so far
-	Capacity uint16
+	Mask     byte   // its two bits of the byte before every fourth server's Status, 1 on every server before October 2026, 0 or 1 since, unsure what it marks
+	Status   byte   // the game's marks on it, bits of StatusNew, StatusRecommended and StatusRestricted
+	Players  uint32 // likely how many play on it, always below Capacity so far, 0 since October 2026 @TODO: remove
+	Capacity uint16 // total capacity available on the server, 0 since October 2026 @TODO: remove
+	Load     byte   // percentage load in place of Players and Capacity, which it replaced since October 2026
 }
 
 // What a Server's Status marks it with in the game's server list.
 const (
+	StatusNew         = 0x01 // "New"
 	StatusRecommended = 0x02 // "Recommended" as shown in the UI
 	StatusRestricted  = 0x04 // "Creation Restricted" as shown in the UI
 )
 
-// String is "1301:LIVE_Light_001 3245/7500 restricted": its ID, name, players and capacity, and what the game marks it with.
+// String is "1310:LIVE_Light_010 10% new restricted": its ID, Name, load, and what the game marks it with.
 func (s Server) String() string {
-	str := fmt.Sprintf("%d:%s %d/%d", s.ID, s.Name, s.Players, s.Capacity)
+	str := fmt.Sprintf("%d:%s %d%%", s.ID, s.Name, s.Load)
+	if s.Capacity != 0 { // the form before October 2026, @TODO: remove
+		str = fmt.Sprintf("%d:%s %d/%d", s.ID, s.Name, s.Players, s.Capacity)
+	}
+	if s.Status&StatusNew != 0 {
+		str += " new"
+	}
 	if s.Status&StatusRecommended != 0 {
 		str += " recommended"
 	}

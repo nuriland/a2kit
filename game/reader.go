@@ -38,6 +38,14 @@ func (r *reader) take(n int) []byte {
 // skip reads n bytes and discards them.
 func (r *reader) skip(n int) { r.take(n) }
 
+// peek returns the next n bytes without reading them, nil when fewer remain.
+func (r *reader) peek(n int) []byte {
+	if r.bad || n > r.left() {
+		return nil
+	}
+	return r.p[r.i : r.i+n]
+}
+
 // u8 reads a single byte.
 func (r *reader) u8() byte {
 	if b := r.take(1); b != nil {

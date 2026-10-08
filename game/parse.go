@@ -1,6 +1,7 @@
 package game
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -204,6 +205,7 @@ func servers(r *reader) Event {
 	var (
 		s    = Servers{List: make([]Server, r.u8())}
 		mask byte
+		load bool
 	)
 	for i := range s.List {
 		v := Server{ID: r.u16(), Faction: r.u8()}
@@ -214,9 +216,15 @@ func servers(r *reader) Event {
 		v.Name = r.name()
 		v.Mask = groupBits(r, i, len(s.List), &mask)
 		v.Status = r.u8()
-		v.Capacity = r.u16()
-		v.Players = r.u32()
-
+		if i == 0 {
+			load = bytes.HasSuffix(r.peek(4), []byte{0x50, 0x01, 0x00})
+		}
+		if load {
+			v.Load = r.u8()
+		} else {
+			v.Capacity = r.u16()
+			v.Players = r.u32()
+		}
 		r.skip(3)
 
 		s.List[i] = v

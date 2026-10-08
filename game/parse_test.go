@@ -114,6 +114,27 @@ func TestParseServers(t *testing.T) {
 	}
 }
 
+// Since October 2026 a server carries one load byte where its capacity and players were
+func TestParseServersLoad(t *testing.T) {
+	payload := unhex(t, "00 00 03"+
+		" 15 05 01 15 05 00 00 03 4c 5f 31 15 04 28 50 01 00"+
+		" 1e 05 01 1e 05 00 00 04 4c 5f 31 30 03 0a 50 01 00"+
+		" fd 08 02 fd 08 00 00 03 44 5f 31 04 34 50 01 00"+
+		" 01 01")
+	want := game.Servers{List: []game.Server{
+		{ID: 1301, Name: "L_1", Faction: 1, Mask: 1, Status: game.StatusRestricted, Load: 40},
+		{ID: 1310, Name: "L_10", Faction: 1, Mask: 1, Status: game.StatusNew | game.StatusRecommended, Load: 10},
+		{ID: 2301, Name: "D_1", Faction: 2, Mask: 1, Status: game.StatusRestricted, Load: 52},
+	}}
+	e, err := game.Parse(wire.Frame{Opcode: 0x3909, Payload: payload})
+	if err != nil || !reflect.DeepEqual(e, want) {
+		t.Fatalf("got %#v, %v; want %#v", e, err, want)
+	}
+	if s := fmt.Sprint(e.(game.Servers).List); s != "[1301:L_1 40% restricted 1310:L_10 10% new recommended 2301:D_1 52% restricted]" {
+		t.Errorf("printed %s", s)
+	}
+}
+
 func TestParseCharacters(t *testing.T) {
 	fs := frames(t, "testdata/characters.bin")
 	if len(fs) != 1 {
@@ -270,6 +291,8 @@ func TestParseRejects(t *testing.T) {
 		{"characters on server 0", 0x390B, "00 00 01 00 00 01 41 03 00 00 00 00 00 00 00 00 00 00 00 06 00 00 00 01 81 e0 d7 f8 a0 01 00 00 00 00 00 00 00 00 00 00 00 01 01", game.ErrLayout},
 		{"servers whose trailer is not 01 01", 0x3909, "00 00 00 01 00", game.ErrLayout},
 		{"servers whose mask has bits past the end", 0x3909, "00 00 01 15 05 01 15 05 00 00 01 41 05 00 58 1b 46 09 00 00 50 01 00 01 01", game.ErrLayout},
+		{"servers cut after a load byte", 0x3909, "00 00 01 15 05 01 15 05 00 00 01 41 01 00 28", game.ErrLayout},
+		{"servers with a load byte on one and capacity and players on the next", 0x3909, "00 00 02 15 05 01 15 05 00 00 01 41 05 00 28 50 01 00 16 05 01 16 05 00 00 01 42 00 58 1b 46 09 00 00 50 01 00 01 01", game.ErrLayout},
 		{"characters without the mask", 0x390B, "00 00 01 15 05 01 41 03 00 00 00 00 00 00 00 00 00 00 00 06 00 00 00 01 81 e0 d7 f8 a0 01 00 00 00 00 00 00 00 00 00 00 01 01", game.ErrLayout},
 		{"characters whose mask has bits past the end", 0x390B, "00 00 01 15 05 01 41 03 00 00 00 00 00 00 00 00 00 00 00 06 00 00 00 01 81 e0 d7 f8 a0 01 00 00 00 00 00 00 00 00 00 00 04 01 01", game.ErrLayout},
 		{"redirect to no host", 0x390F, "00 00 18 05 00 10 34", game.ErrLayout},
