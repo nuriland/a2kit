@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nuriland/a2kit/capture"
+	"github.com/nuriland/a2kit/game"
 	"github.com/nuriland/a2kit/wire"
 )
 
@@ -19,7 +20,7 @@ type Connection struct {
 	SYN, SYNACK    int
 	FIN, RST       bool
 	Sent, Received int
-	Game           bool // the decoder read the game's messages on it
+	Game           bool
 	Status         string
 }
 
@@ -35,25 +36,39 @@ func Connections(name string, cfg Config) ([]Connection, error) {
 
 func connections(src wire.SegmentReader, d *wire.Decoder) ([]Connection, error) {
 	var (
-		l    = &ledger{SegmentReader: src, open: make(map[pair]*conn)}
-		game = make(map[pair]bool)
+		l      = &ledger{SegmentReader: src, open: make(map[pair]*conn)}
+		locked = make(map[pair]bool)           // the pairs the decoder read the game's messages on
+		worlds = make(map[netip.AddrPort]bool) // where the lobby sent the client
 	)
 	for m, err := range New(d, l).Messages() {
 		if err != nil {
 			return nil, err
 		}
 		if m.Flags&wire.FromServer != 0 {
-			game[pairOf(m.Src, m.Dst, m.IfIndex)] = true
+			locked[pairOf(m.Src, m.Dst, m.IfIndex)] = true
+		}
+		if r, ok := m.Event.(game.Redirect); ok {
+			if a, ok := r.Addr(); ok {
+				worlds[a] = true
+			}
 		}
 	}
 
 	out := make([]Connection, len(l.conns))
 	for i, c := range l.conns {
-		c.Game, c.Status = game[pairOf(c.Client, c.Server, c.IfIndex)], c.status()
+		c.Game, c.Status = locked[pairOf(c.Client, c.Server, c.IfIndex)] || worlds[c.Server], c.status()
 		out[i] = c.Connection
 	}
 	slices.SortStableFunc(out, func(x, y Connection) int { return x.Start.Compare(y.Start) })
 	return out, nil
+}
+
+func (c Connection) Failed() bool {
+	switch c.Status {
+	case "no answer", "refused", "half open", "silent", "reset":
+		return true
+	}
+	return false
 }
 
 // ledger reads a recording's segments for the decoder, and tallies every connection they belong to.
@@ -178,6 +193,8 @@ func (l *ledger) tally(s wire.Segment) {
 
 func (c *conn) status() string {
 	switch {
+	case c.SYNACK > 0 && c.Sent > 0 && c.Received == 0:
+		return "silent"
 	case c.FIN:
 		return "closed" // a FIN then a RST is how the client closes
 	case c.SYN > 0 && c.SYNACK == 0 && c.refused:

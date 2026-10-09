@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -16,14 +17,20 @@ import (
 var connsCommand = command{
 	name:  "conns",
 	args:  "[flags] FILE",
-	short: "every TCP connection in a recording, and which were the game's",
-	long: `Conns reads FILE, a recording, and lists every TCP connection in it. It prints when it began
-and for how long it lasted, its two ends, how the handshake went, how it closed, how many bytes each way, and
-a status. Useful for debugging a session when a2k show doesn't print anything.
+	short: "the game's TCP connections in a recording, and any that failed",
+	long: `Conns reads FILE, a recording, and lists the game's TCP connections in it, and any that failed. It
+prints when each began and for how long it lasted, its two ends, how the handshake went, how it closed,
+how many bytes each way, and a status. Useful for debugging a session when a2k show doesn't print
+anything. A "silent" server took the handshake and the client's bytes and never sent any, which is
+what a dead game server looks like behind its proxy.
 
   a2k conns down.pcap
-  a2k conns -o conns.txt down.pcap `,
+  a2k conns -all down.pcap               every connection the computer made, not only the game's
+  a2k conns -o conns.txt down.pcap`,
 	define: func(fs *flag.FlagSet, o *options) func([]string) error {
+		var all bool
+		fs.BoolVar(&all, "all", false, "list every connection, not only the game's and the failed ones")
+
 		o.verboseFlag(fs)
 		o.outputFlag(fs)
 		return func(args []string) error {
@@ -31,13 +38,12 @@ a status. Useful for debugging a session when a2k show doesn't print anything.
 			if err != nil {
 				return err
 			}
-			return conns(o, name)
+			return conns(o, name, all)
 		}
 	},
 }
 
-// conns reads a recording, and writes a line a connection.
-func conns(o *options, name string) error {
+func conns(o *options, name string, all bool) error {
 	if name == "-" {
 		return usagef("conns reads a recording by its name, not stdin")
 	}
@@ -54,26 +60,29 @@ func conns(o *options, name string) error {
 	if err != nil {
 		return err
 	}
-	writeConns(out, cs)
-	err = errors.Join(out.Close(), o.close())
-
-	var game = 0
+	var (
+		n, game = len(cs), 0
+		t0      time.Time
+	)
 	for _, c := range cs {
 		if c.Game {
 			game++
 		}
 	}
-	fmt.Fprintf(o.stderr, "a2k: done connections=%d game=%d\n", len(cs), game)
+	if n > 0 {
+		t0 = cs[0].Start
+	}
+	if !all {
+		cs = slices.DeleteFunc(cs, func(c a2kit.Connection) bool { return !c.Game && !c.Failed() })
+	}
+	writeConns(out, cs, t0)
+	err = errors.Join(out.Close(), o.close())
+	fmt.Fprintf(o.stderr, "a2k: done connections=%d shown=%d game=%d\n", n, len(cs), game)
 	return err
 }
 
-// writeConns prints the connections as a table, their start counted from the first.
-func writeConns(w io.Writer, cs []a2kit.Connection) {
-	var t0 time.Time
-	if len(cs) > 0 {
-		t0 = cs[0].Start
-	}
-
+// writeConns prints the connections as a table, their start counted from t0, the recording's first.
+func writeConns(w io.Writer, cs []a2kit.Connection, t0 time.Time) {
 	var tw *tabwriter.Writer = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "start\tfor\tclient\tserver\tsyn\tsyn-ack\tclose\tsent\treceived\tstatus\tnote")
 	for _, c := range cs {

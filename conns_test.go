@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net/netip"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -72,7 +74,7 @@ func TestConnections(t *testing.T) {
 		"10.0.0.1:50003>10.0.0.4:13700 syn=1 synack=1 fin=false rst=false sent=0 recv=0 open",
 		"10.0.0.1:50004>10.0.0.5:3306 syn=0 synack=0 fin=false rst=false sent=0 recv=7 already open",
 		"10.0.0.1:50005>10.0.0.6:9000 syn=1 synack=1 fin=false rst=false sent=0 recv=0 half open",
-		"10.0.0.1:50006>10.0.0.7:22 syn=0 synack=1 fin=false rst=false sent=3 recv=0 open",
+		"10.0.0.1:50006>10.0.0.7:22 syn=0 synack=1 fin=false rst=false sent=3 recv=0 silent",
 	}, "\n")
 
 	p := wiretest.NewPcap(binary.LittleEndian, true, 1) // Ethernet
@@ -111,7 +113,7 @@ func TestConnectionsCopies(t *testing.T) {
 	twice(1300*time.Millisecond, hop{a, w, 101, wire.PSH | wire.ACK, 10})
 
 	cs := talked(t, p.Bytes())
-	if len(cs) != 1 || cs[0].SYN != 2 || cs[0].SYNACK != 1 || cs[0].Sent != 10 || cs[0].Status != "open" { // @TODO: some test helpers would be nice for these things
+	if len(cs) != 1 || cs[0].SYN != 2 || cs[0].SYNACK != 1 || cs[0].Sent != 10 || cs[0].Status != "silent" { // @TODO: some test helpers would be nice for these things
 		t.Fatalf("%+v", cs)
 	}
 }
@@ -128,6 +130,42 @@ func TestConnectionsTwoAdapters(t *testing.T) {
 	cs := talked(t, p.Bytes())
 	if len(cs) != 2 || cs[0].SYN != 1 || cs[1].SYN != 1 || cs[0].IfIndex == cs[1].IfIndex {
 		t.Fatalf("%+v", cs)
+	}
+}
+
+func TestConnectionsRedirect(t *testing.T) {
+	read := func(name string) []byte {
+		b, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	var (
+		stream          = slices.Concat(read("game/testdata/redirect.bin"), read("game/testdata/lobbyping.bin"))
+		a, lobby, world = ap("10.0.0.1:50001"), ap("10.0.0.9:13700"), ap("193.202.112.97:13328")
+		b               = ap("10.0.0.1:50002")
+		p               = wiretest.NewPcap(binary.LittleEndian, true, 1)
+		at              = func(s int) time.Time { return t0.Add(time.Duration(s) * time.Second) }
+	)
+	p.Add(at(0), wrap(hop{a, lobby, 100, wire.SYN, 0}))
+	p.Add(at(1), wrap(hop{lobby, a, 500, wire.SYN | wire.ACK, 0}))
+	p.Add(at(2), wrap(hop{a, lobby, 101, wire.ACK, 0}))
+	p.Add(at(3), wiretest.Ethernet(wiretest.TCP(lobby, a, 501, 101, byte(wire.PSH|wire.ACK), stream)))
+	p.Add(at(4), wrap(hop{b, world, 100, wire.SYN, 0}))
+	p.Add(at(5), wrap(hop{world, b, 500, wire.SYN | wire.ACK, 0}))
+	p.Add(at(6), wrap(hop{b, world, 101, wire.ACK, 0}))
+	p.Add(at(7), wrap(hop{b, world, 101, wire.PSH | wire.ACK, 276}))
+
+	cs := talked(t, p.Bytes())
+	if len(cs) != 2 {
+		t.Fatalf("%d connections: %+v", len(cs), cs)
+	}
+	if c := cs[0]; !c.Game || c.Status != "open" || c.Received != len(stream) || c.Failed() {
+		t.Errorf("the lobby: %+v", c)
+	}
+	if c := cs[1]; !c.Game || c.Status != "silent" || c.Sent != 276 || !c.Failed() {
+		t.Errorf("the world: %+v", c)
 	}
 }
 
