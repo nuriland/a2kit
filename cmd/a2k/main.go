@@ -23,7 +23,7 @@ type command struct {
 	define func(fs *flag.FlagSet, o *options) func(args []string) error
 }
 
-var commands = []command{watchCommand, recordCommand, showCommand, exportCommand, timelineCommand, statsCommand, adaptersCommand, versionCommand}
+var commands = []command{watchCommand, recordCommand, showCommand, exportCommand, timelineCommand, statsCommand, connsCommand, adaptersCommand, versionCommand}
 
 type usageError struct{ error }
 

@@ -21,6 +21,7 @@ a2k show fight.pcap                           # read the saved game session
 a2k export fight.pcap -o fight.jsonl          # a log to share
 a2k timeline fight.pcap -o fight.trace.json   # a timeline reconstruction via ui.perfetto.dev
 a2k stats fight.pcap                          # which message types came, and which a2k decodes
+a2k conns down.pcap                           # every TCP connection in a recording, and which were the game's
 ```
 
 Example usage of `a2k show`:
