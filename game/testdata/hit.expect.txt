@@ -7,3 +7,6 @@
 04 38 game.Hit {Actor:15943 Target:18777 Skill:11010000 Damage:16 Extra:[1] Type:2 Scalar:10000 Mods:2 Direction:0}
 04 38 game.Hit {Actor:15943 Target:19980 Skill:11190000 Damage:26 Extra:[2 2 2] Type:3 Scalar:10000 Mods:2 Direction:0}
 04 38 game.Hit {Actor:15943 Target:31355 Skill:11190000 Damage:36 Extra:[3] Type:2 Scalar:10000 Mods:0 Direction:0}
+04 38 game.Hit {Actor:5165 Target:5165 Skill:4002 Damage:0 Extra:[] Type:2 Scalar:10000 Mods:0 Direction:0}
+04 38 game.Hit {Actor:5165 Target:46100 Skill:9868 Damage:0 Extra:[] Type:2 Scalar:10000 Mods:0 Direction:0}
+04 38 game.Hit {Actor:28476 Target:28476 Skill:1900710 Damage:0 Extra:[] Type:0 Scalar:10000 Mods:0 Direction:0}

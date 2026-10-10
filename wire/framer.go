@@ -221,7 +221,7 @@ func (f *framer) plausible(b []byte, size int) bool {
 		return size > minBundle && (len(b) < 3 || b[2] == 0xFF) // a flagged bundle
 	}
 	if f.knownOnly {
-		return opcode(b).Known()
+		return opcode(b).listed()
 	}
 	return inFamily(b[1])
 }

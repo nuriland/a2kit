@@ -6,3 +6,5 @@
 1C 37 game.Move {Entity:39705 Pos:{X:-25664.053 Y:-33089.8 Z:18074}}
 1C 37 game.Move {Entity:14692 Pos:{X:-23952.59 Y:-42236.453 Z:17935.75}}
 1C 37 game.Move {Entity:27239 Pos:{X:-24092.316 Y:-42056.7 Z:17949}}
+2F 37 game.Move {Entity:44744 Pos:{X:-71485.45 Y:77498.484 Z:24391}}
+2F 37 game.Move {Entity:44744 Pos:{X:-71499.67 Y:76292.56 Z:24421}}

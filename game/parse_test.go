@@ -273,14 +273,18 @@ func TestParseServersGroups(t *testing.T) {
 	}
 }
 
-// Both forms of the lead the flag's 0x08 bit chooses, with the one extra byte when it's set.
+// The flag's low four bits each add a byte before the headings, and bit 0 set leaves out the
+// trailing 01. The two headings are the same value, or a few units apart.
 func TestParseTurn(t *testing.T) {
 	for _, tt := range []struct {
 		name, payload string
 		want          game.Turn
 	}{
-		{"short lead", "64 02 11 22 34 12 34 12 01", game.Turn{Entity: 100, Heading: 0x1234}},
-		{"long lead", "ac 02 08 33 44 55 cd ab cd ab 01", game.Turn{Entity: 300, Heading: 0xABCD}},
+		{"flag 27", "c2 14 27 03 b1 1a c4 72 c4 72", game.Turn{Entity: 2626, Heading: 0x72c4, Heading2: 0x72c4}},
+		{"flag 2f, with four bytes", "d0 e9 03 2f 03 35 09 03 ec 06 ec 06", game.Turn{Entity: 62672, Heading: 0x06ec, Heading2: 0x06ec}},
+		{"flag 22, with a trailer", "e4 a9 02 22 0c 73 02 73 02 01", game.Turn{Entity: 38116, Heading: 0x0273, Heading2: 0x0273}},
+		{"flag 26, with a trailer and two bytes", "c0 bf 02 26 02 11 ed 3a ed 3a 01", game.Turn{Entity: 40896, Heading: 0x3aed, Heading2: 0x3aed}},
+		{"headings that differ", "90 67 0f 01 1a 2e ff 5b 29 6d 29", game.Turn{Entity: 13200, Heading: 0x295b, Heading2: 0x296d}},
 	} {
 		e, err := game.Parse(wire.Frame{Opcode: 0x371D, Payload: unhex(t, tt.payload)})
 		if err != nil || e != tt.want {
@@ -289,31 +293,151 @@ func TestParseTurn(t *testing.T) {
 	}
 }
 
-// 28/29 37 carry a position before the shared heading tail.
-func TestParseHeadingWithPos(t *testing.T) {
-	e, err := game.Parse(wire.Frame{Opcode: 0x3728, Payload: unhex(t,
-		"64 04 00 00 80 42 00 00 a0 42 00 00 c0 42 00 00 90 42 00 00 a8 42 00 00 70 41 11 22 01")})
-	want := game.Heading{Entity: 100, Pos: game.Pos{X: 64, Y: 80, Z: 96},
-		Heading1: 72, Heading2: 84, Speed: 15}
-	if err != nil || e != want {
+// Since October 2026 the mask before a spawn's NPC is two bytes, and four before it.
+func TestParseSpawnMask(t *testing.T) {
+	for _, tt := range []struct {
+		name, payload string
+		want          game.Spawn
+	}{
+		{"mask of two bytes", "d0 e9 03 0c 20 00 f8 3a 29 00 00 02 80 2f b9 c7 00 24 55 47 00 f8 b8 46",
+			game.Spawn{Entity: 62672, NPC: 2702072, Mask: 0x200c, Pos: game.Pos{X: -94815, Y: 54564, Z: 23676}}},
+		{"mask of four bytes", "a8 81 02 05 20 00 00 00 4a 0f 20 00 00 02 49 f3 d2 c6 e5 d0 00 c7 00 dc 8b 46",
+			game.Spawn{Entity: 32936, NPC: 2101066, Mask: 0x2005, Pos: game.Pos{X: -27001.643, Y: -32976.895, Z: 17902}}},
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: 0x3641, Payload: unhex(t, tt.payload)})
+		if err != nil || e != tt.want {
+			t.Errorf("%s: got %+v, %v; want %+v", tt.name, e, err, tt.want)
+		}
+	}
+}
+
+// 34 36 is a spawn too, with no flag before the NPC.
+func TestParseSpawnStatic(t *testing.T) {
+	payload := unhex(t, "bb b4 02 01 00 e1 c8 10 00 80 8f 8b c7 00 8b 7b 47 00 ca bb 46")
+	want := game.Spawn{Entity: 39483, NPC: 1100001, Mask: 1, Pos: game.Pos{X: -71455, Y: 64395, Z: 24037}}
+	if e, err := game.Parse(wire.Frame{Opcode: 0x3634, Payload: payload}); err != nil || e != want {
 		t.Errorf("got %+v, %v; want %+v", e, err, want)
 	}
 }
 
-// 2A 37 has no position, and its lead before the shared tail varies in length.
-func TestParseHeadingOnly(t *testing.T) {
+// A hit whose switch nibble is 0 sends no damage.
+func TestParseHitNoDamage(t *testing.T) {
+	payload := unhex(t, "ad 28 00 00 ad 28 a2 0f 00 00 01 02 ef 1a 06 00 01 00 00 00 90 4e 01 00")
+	want := game.Hit{Actor: 5165, Target: 5165, Skill: 4002, Type: 2, Scalar: 10000}
+	if e, err := game.Parse(wire.Frame{Opcode: 0x3804, Payload: payload}); err != nil || !reflect.DeepEqual(e, want) {
+		t.Errorf("got %+v, %v; want %+v", e, err, want)
+	}
+}
+
+// The short form of a cast has its angle and no position, whoever its target is.
+func TestParseCastShort(t *testing.T) {
 	for _, tt := range []struct {
-		name, lead string
+		payload string
+		want    game.Cast
 	}{
-		{"short lead", "12"},
-		{"long lead", "16 0d 05"},
+		{"ad 28 00 92 3e c2 00 09 00 ad 28 08 b8 ab 43 90 4e 01 00", game.Cast{Actor: 5165, Target: 5165, Skill: 12730002, Angle: 343.437744140625}},
+		{"ad 28 00 91 3e c2 00 0b 00 a0 f6 03 a1 8a 2c 43 90 4e 01 00", game.Cast{Actor: 5165, Target: 64288, Skill: 12730001, Angle: 172.54151916503906}},
 	} {
-		payload := unhex(t, tt.lead+" 00 00 80 42 00 00 a0 42 00 00 c0 42 11 22 01")
-		e, err := game.Parse(wire.Frame{Opcode: 0x372A, Payload: append(unhex(t, "64"), payload...)})
-		want := game.Heading{Entity: 100, Heading1: 64, Heading2: 80, Speed: 96}
-		if err != nil || e != want {
-			t.Errorf("%s: got %+v, %v; want %+v", tt.name, e, err, want)
+		e, err := game.Parse(wire.Frame{Opcode: 0x3802, Payload: unhex(t, tt.payload)})
+		if err != nil || e != tt.want {
+			t.Errorf("got %+v, %v; want %+v", e, err, tt.want)
 		}
+	}
+}
+
+// 2F 37 is a move with more after the position.
+func TestParseMove2F(t *testing.T) {
+	payload := unhex(t, "c8 dd 02 02 ba 9e 8b c7 3e 5d 97 47 00 8e be 46 00 00 00 00 00 00 00 00 00 00 00 00 00 85 3f 47 01")
+	e, err := game.Parse(wire.Frame{Opcode: 0x372F, Payload: payload})
+	m, ok := e.(game.Move)
+	if err != nil || !ok || m.Entity != 44744 || m.X > -71000 || m.X < -72000 || m.Y < 77000 {
+		t.Errorf("got %+v, %v", e, err)
+	}
+}
+
+// Stats' two groups, each with its count, and the mask that says which are there.
+func TestParseStats(t *testing.T) {
+	for _, tt := range []struct {
+		name, payload string
+		want          game.Stats
+	}{
+		{"u32 only", "ad 28 01 01 03 90 5f 01 00", game.Stats{Entity: 5165, Values: []game.Stat{{ID: 3, Value: 90000}}}},
+		{"u64 only", "fb d4 02 02 01 00 73 00 00 00 00 00 00 00", game.Stats{Entity: 43643, Values: []game.Stat{{ID: 0, Value: 115}}}},
+		{"both", "ad 28 03 02 01 9d 03 00 00 03 a4 32 01 00 01 00 77 00 00 00 00 00 00 00",
+			game.Stats{Entity: 5165, Values: []game.Stat{{ID: 1, Value: 925}, {ID: 3, Value: 78500}, {ID: 0, Value: 119}}}},
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: 0x8D00, Payload: unhex(t, tt.payload)})
+		if err != nil || !reflect.DeepEqual(e, tt.want) {
+			t.Errorf("%s: got %+v, %v; want %+v", tt.name, e, err, tt.want)
+		}
+	}
+}
+
+// The guessed opcodes, read from frames of a capture of 10 October 2026.
+func TestParseGuesses(t *testing.T) {
+	pos := game.Pos{X: -100938.4765625, Y: 54664.25, Z: 24089}
+	for _, tt := range []struct {
+		name string
+		op   wire.Opcode
+		hex  string
+		want game.Event
+	}{
+		{"target", 0x3835, "d0 e9 03 00 ad 28", game.Target{Entity: 62672, Target: 5165}},
+		{"target let go", 0x3835, "a0 f6 03 00 00", game.Target{Entity: 64288}},
+		{"combo", 0x3818, "89 26 00 00 01 8a 26 00 00", game.Combo{From: 9865, To: 9866}},
+		{"combo next", 0x3819, "01 8a 26 00 00", game.Combo{To: 9866}},
+		{"skill use", 0x3801, "00 00 00 a1 0f 00 00", game.SkillUse{Skill: 4001}},
+		{"skill use with info", 0x3801, "00 13 18 8c 26 00 00", game.SkillUse{Skill: 9868, Info: 0x1813}},
+		{"engage", 0x3834, "00 00 00 d0 e9 03", game.Engage{Entity: 62672}},
+		{"threat", 0x3831, "00 00 fb d4 02 7f 3e", game.Threat{Entity: 43643, Value: 0x3e7f}},
+		{"height", 0x3746, "ad 28 00 32 bc 46", game.Height{Entity: 5165, Z: 24089}},
+		{"ref", 0x363B, "9a ed 01", game.Ref{Entity: 30362}},
+		{"signal", 0x383B, "00 00", game.Signal{}},
+		{"tagged", 0x3638, "9a ed 01 ad 28 01", game.Tagged{Entity: 30362, Data: []byte{0xad, 0x28, 0x01}}},
+		{"windup", 0x3809, "a0 f6 03 00 44 ae 12 00 01 02 ad 28 83 80 2e c3 53 48 b6 c7 86 85 55 47 f9 fc b8 46 f4 03 01",
+			game.Windup{Actor: 64288, Target: 5165, Skill: 1224260, Angle: -174.5019989013672, Duration: 500,
+				Pos: game.Pos{X: -93328.6484375, Y: 54661.5234375, Z: 23678.486328125}}},
+		{"script", 0x8D15, "00 09 14 43 75 74 73 63 65 6e 65 5f 4c 5f 41 5f 51 4d 5f 31 30 30 31 00 d8 5f 01 00 00 00 00 00 01 00 00 00 00",
+			game.Script{Kind: 9, Name: "Cutscene_L_A_QM_1001"}},
+		{"effect", 0x382A, "ad 28 01 11 05 12 27 00 00 88 13 00 00 00 00 00 00 96 8a 81 26 a1 01 00 00 ad 28 01 00 3d 25 c5 c7 40 88 55 47 00 32 bc 46",
+			game.Effect{Entity: 5165, Kind: 0x11, Instance: 5, ID: 10002, Value: 5000, Source: 5165, Pos: pos,
+				Time: time.UnixMilli(1791647386262).UTC()}},
+		{"effect changed", 0x382B, "ad 28 11 05 12 27 00 00 7d 2d 02 00 00 00 00 00 ee a4 83 26 a1 01 00 00 ad 28 01 02 3d 25 c5 c7 40 88 55 47 00 32 bc 46",
+			game.Effect{Entity: 5165, Kind: 0x11, Instance: 5, ID: 10002, Value: 142717, Source: 5165, Pos: pos, Refresh: true,
+				Time: time.UnixMilli(0x1a12683a4ee).UTC()}},
+		{"move 3C 37", 0x373C, "ad 28 00 3d 25 c5 c7 40 88 55 47 00 32 bc 46 00 00 b4 43 00 00 05 00", game.Move{Entity: 5165, Pos: pos}},
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: tt.op, Payload: unhex(t, tt.hex)})
+		if err != nil || !reflect.DeepEqual(e, tt.want) {
+			t.Errorf("%s: got %+v, %v; want %+v", tt.name, e, err, tt.want)
+		}
+	}
+}
+
+// 4A 36 is a count of ids and values, and eight bytes after.
+func TestParseAttributes(t *testing.T) {
+	payload := unhex(t, "d8 18 03 1f 00 05 00 00 00 59 00 c4 09 00 00 48 f4 ff ff ff ff 00 00 00 00 00 00 00 00")
+	want := game.Attributes{Entity: 3160, Values: []game.Attribute{{ID: 0x1f, Value: 5}, {ID: 0x59, Value: 2500}, {ID: 0xf448, Value: -1}}}
+	if e, err := game.Parse(wire.Frame{Opcode: 0x364A, Payload: payload}); err != nil || !reflect.DeepEqual(e, want) {
+		t.Errorf("got %+v, %v; want %+v", e, err, want)
+	}
+	// 49 36 is the player's, and has no entity
+	self := unhex(t, "00 00 01 1f 00 05 00 00 00 00 00 00 00 00 00 00 00")
+	if e, err := game.Parse(wire.Frame{Opcode: 0x3649, Payload: self}); err != nil || !reflect.DeepEqual(e, game.Attributes{Values: []game.Attribute{{ID: 0x1f, Value: 5}}}) {
+		t.Errorf("got %+v, %v", e, err)
+	}
+	if _, err := game.Parse(wire.Frame{Opcode: 0x364A, Payload: unhex(t, "d8 18 03 1f 00 05 00 00 00 00 00 00 00 00 00 00 00")}); !errors.Is(err, game.ErrLayout) {
+		t.Errorf("a count of three with one value: %v", err)
+	}
+}
+
+// The scene's name is the last thing in 21 36, when it has one.
+func TestParseCutscene(t *testing.T) {
+	payload := unhex(t, "01 00 00 00 a1 86 01 00 6d 39 d2 00 00 00 00 00 3d 25 c5 c7 40 88 55 47 00 32 bc 46 64 25 bb b5 00 00 00 00 00 00 00 00 00 00 00 00 14 43 75 74 73 63 65 6e 65 5f 4c 5f 41 5f 51 4d 5f 31 30 30 31 00")
+	e, err := game.Parse(wire.Frame{Opcode: 0x3621, Payload: payload})
+	c, ok := e.(game.Cutscene)
+	if err != nil || !ok || c.Name != "Cutscene_L_A_QM_1001" || c.ID != 100001 || c.Kind != 1 || c.Pos != (game.Pos{X: -100938.4765625, Y: 54664.25, Z: 24089}) {
+		t.Errorf("got %+v, %v", e, err)
 	}
 }
 
@@ -361,10 +485,15 @@ func TestParseRejects(t *testing.T) {
 		{"hit with switch nibble 6 cut in its three bytes", 0x3804, "c7 7c 06 00 f5 a3 02 e0 26 a8 00 00 02 00 00", game.ErrLayout},
 		{"hit with switch nibble 5", 0x3804, "c7 7c 05 00 f5 a3 02 e0 26 a8 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 90 4e 20 01 00", game.ErrUnread},
 		{"hit whose type does not fit a byte", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 ac 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00", game.ErrLayout},
-		{"turn cut short", 0x371D, "64 02 11 22 34 12 34 12", game.ErrLayout},
-		{"turn whose heading is not repeated", 0x371D, "64 02 11 22 34 12 00 00 01", game.ErrLayout},
-		{"turn whose trailer is not 01", 0x371D, "64 02 11 22 34 12 34 12 02", game.ErrLayout},
-		{"turn with a byte too many", 0x371D, "64 02 11 22 34 12 34 12 01 00", game.ErrLayout},
+		{"turn cut short", 0x371D, "64 02 11 34 12 34 12", game.ErrLayout},
+		{"turn whose trailer is not 01", 0x371D, "64 02 11 34 12 34 12 02", game.ErrLayout},
+		{"turn with a byte too many", 0x371D, "64 02 11 34 12 34 12 01 00", game.ErrLayout},
+		{"turn with a trailer its flag leaves out", 0x371D, "64 03 11 22 34 12 34 12 01", game.ErrLayout},
+		{"turn with fewer bytes than its flag adds", 0x371D, "64 07 11 22 34 12 34 12", game.ErrLayout},
+		{"stats with no group", 0x8D00, "ad 28 00", game.ErrLayout},
+		{"stats with a group its mask does not have", 0x8D00, "ad 28 04 01 03 90 5f 01 00", game.ErrLayout},
+		{"stats claiming more values than bytes", 0x8D00, "ad 28 01 05 03 90 5f 01 00", game.ErrLayout},
+		{"stats with a byte too many", 0x8D00, "ad 28 01 01 03 90 5f 01 00 00", game.ErrLayout},
 		{"heading too short for its tail", 0x372A, "64 12 00 00 80 42 00 00 a0 42 00 00 c0 42 11", game.ErrLayout},
 		{"heading whose trailer is not 01", 0x3728, "64 04 00 00 80 42 00 00 a0 42 00 00 c0 42 00 00 90 42 00 00 a8 42 00 00 70 41 11 22 02", game.ErrLayout},
 		{"heading with a byte too many", 0x372A, "64 12 00 00 80 42 00 00 a0 42 00 00 c0 42 11 22 01 00", game.ErrLayout},
@@ -373,7 +502,7 @@ func TestParseRejects(t *testing.T) {
 		{"hit claiming more extra hits than bytes", 0x3804, "c7 7c 24 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 7f 01 00", game.ErrLayout},
 		{"death with a byte too many", 0x3642, "f5 a3 02 00 03 00", game.ErrLayout},
 		{"death whose middle varint is not zero", 0x3642, "f5 a3 02 01 03", game.ErrLayout},
-		{"cast without a position", 0x3802, "e4 72 00 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00", game.ErrUnread},
+		{"cast of the short form with a byte too many", 0x3802, "e4 72 00 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00 00", game.ErrLayout},
 		{"cast end with a byte too many", 0x3806, "c7 7c e0 26 a8 00 01 0c 00", game.ErrLayout},
 		{"move 1B 37 whose flag adds a byte it does not have", 0x371B, "e4 72 05 03 2b d5 bc c6 01 6f 24 c7 6a 42 8c", game.ErrLayout},
 		{"spawn with a name", 0x3641, "a8 81 02 05 20 00 00 01 4a 0f 20 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00", game.ErrUnread},

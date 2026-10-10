@@ -70,14 +70,14 @@ func tracks(evs []traced, pid int) []string {
 
 func TestFight(t *testing.T) {
 	evs := traceOf(t, logOf(t, Config{},
-		"0 02 38 server x3wA4CaoAAAA9aMCAAAAAAAAAAAAAAAAAAAAAA==",   // 15943 casts Keen Strike
-		"5 04 38 server x3wEAPWjAuAmqAAAAkvtn0EBAAAAkE4kAQA=",       // 37365 hits 15943
-		"12 05 38 server x3wC9aMCAOAmqAAk",                          // unread
-		"40 04 38 server x3wEAPWjAuAmqAAAAks=",                      // a hit cut short
-		"100 02 38 server x3wA4CaoAAAA9aMCAAAAAAAAAAAAAAAAAAAAAA==", // cast again before the first ended
-		"470 06 38 server x3zgJqgAAQw=",                             // the cast ends
-		"480 02 38 server x3wA4CaoAAAA9aMCAAAAAAAAAAAAAAAAAAAAAA==", // and never ends
-		"510 42 36 server x3wAAw==",                                 // 15943 dies
+		"0 02 38 server x3wA4CaoAAAA9aMCAAAAAAAAAAAAAAAAAAAAAJBOAQA=",   // 15943 casts Keen Strike
+		"5 04 38 server x3wEAPWjAuAmqAAAAkvtn0EBAAAAkE4kAQA=",           // 37365 hits 15943
+		"12 05 38 server x3wC9aMCAOAmqAAk",                              // unread
+		"40 04 38 server x3wEAPWjAuAmqAAAAks=",                          // a hit cut short
+		"100 02 38 server x3wA4CaoAAAA9aMCAAAAAAAAAAAAAAAAAAAAAJBOAQA=", // cast again before the first ended
+		"470 06 38 server x3zgJqgAAQw=",                                 // the cast ends
+		"480 02 38 server x3wA4CaoAAAA9aMCAAAAAAAAAAAAAAAAAAAAAJBOAQA=", // and never ends
+		"510 42 36 server x3wAAw==",                                     // 15943 dies
 	))
 
 	type span struct {
@@ -153,7 +153,7 @@ func TestCapture(t *testing.T) {
 	if want := []int64{0, 0, -1000, -1000}; !slices.Equal(ts, want) {
 		t.Errorf("frames at %vµs, want %v: after the first frame, to the microsecond", ts, want)
 	}
-	if want := []string{"33 36 Self", "04 38 Hit", "05 38 DoT", "2A 38"}; !slices.Equal(tracks(evs, byOpcode), want) {
+	if want := []string{"33 36 Self", "04 38 Hit", "05 38 DoT", "2A 38 Effect"}; !slices.Equal(tracks(evs, byOpcode), want) {
 		t.Errorf("opcode tracks %q, want %q", tracks(evs, byOpcode), want)
 	}
 }

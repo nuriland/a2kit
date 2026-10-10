@@ -1,1 +1,10 @@
-1D 37 game.Turn {Entity:100 Heading:4660}
+1D 37 game.Turn {Entity:62672 Heading:1772 Heading2:1772}
+1D 37 game.Turn {Entity:62672 Heading:1772 Heading2:1772}
+1D 37 game.Turn {Entity:64102 Heading:65372 Heading2:65372}
+1D 37 game.Turn {Entity:49779 Heading:48984 Heading2:48984}
+1D 37 game.Turn {Entity:49779 Heading:49303 Heading2:49303}
+1D 37 game.Turn {Entity:49779 Heading:49303 Heading2:49303}
+1D 37 game.Turn {Entity:40896 Heading:15085 Heading2:15085}
+1D 37 game.Turn {Entity:11169 Heading:49499 Heading2:50713}
+1D 37 game.Turn {Entity:11169 Heading:49499 Heading2:49173}
+1D 37 game.Turn {Entity:2626 Heading:32648 Heading2:32648}
