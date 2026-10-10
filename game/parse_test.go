@@ -225,6 +225,61 @@ func TestParseCharactersShapes(t *testing.T) {
 	}
 }
 
+// Both tails of an account hold its server twice: the first form until some patch, the second since it, as in the capture of 10 October 2026.
+func TestParseAccountTails(t *testing.T) {
+	head := "00 00 00 01 41 01 00 00 03 31 3a 42 "
+	for _, tt := range []struct {
+		name, tail string
+		server     uint16
+		faction    byte
+	}{
+		{"four zeros then 03 09 03", "17 05 01 00 00 00 00 17 05 03 09 03", 1303, 1},
+		{"six zeros then 03", "06 09 02 00 00 00 00 00 00 06 09 03", 2310, 2},
+		{"the server 0903, which the first form holds as its constant", "03 09 02 00 00 00 00 00 00 03 09 03", 2307, 2},
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: 0x3906, Payload: unhex(t, head+tt.tail)})
+		want := game.Account{ID: "1", Server: tt.server, Faction: tt.faction, Session: [2]string{"A", "B"}}
+		if err != nil || !reflect.DeepEqual(e, want) {
+			t.Errorf("%s: got %+v, %v; want %+v", tt.name, e, err, want)
+		}
+	}
+}
+
+// The last group of four holds fewer, and its mask byte carries bits for those alone.
+func TestParseServersGroups(t *testing.T) {
+	payload := unhex(t, "00 00 06"+
+		" 0e 09 02 0e 09 00 00 03 44 5f 31 55 05 13 50 01 00"+
+		" 0f 09 02 0f 09 00 00 03 44 5f 32 01 10 50 01 00"+
+		" 10 09 02 10 09 00 00 03 44 5f 33 01 0e 50 01 00"+
+		" 11 09 02 11 09 00 00 03 44 5f 34 01 0d 50 01 00"+
+		" 12 09 02 12 09 00 00 03 44 5f 35 05 01 0f 50 01 00"+
+		" 13 09 02 13 09 00 00 03 44 5f 36 01 0e 50 01 00"+
+		" 01 01")
+	e, err := game.Parse(wire.Frame{Opcode: 0x3909, Payload: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := e.(game.Servers).List
+	if len(got) != 6 {
+		t.Fatalf("got %d servers", len(got))
+	}
+	for i, s := range got {
+		if s.Mask != 1 || s.ID != uint16(2318+i) || s.Faction != 2 {
+			t.Errorf("server %d: %+v", i, s)
+		}
+	}
+	if s := fmt.Sprint(got); s != "[2318:D_1 19% new restricted 2319:D_2 16% new 2320:D_3 14% new 2321:D_4 13% new 2322:D_5 15% new 2323:D_6 14% new]" {
+		t.Errorf("printed %s", s)
+	}
+}
+
+func TestParseJoin(t *testing.T) {
+	e, err := game.Parse(wire.Frame{Opcode: 0x390D, Payload: unhex(t, "00 00 00 06 09")})
+	if want := (game.Join{Server: 2310}); err != nil || e != want {
+		t.Errorf("got %+v, %v; want %+v", e, err, want)
+	}
+}
+
 func TestRedirectAddr(t *testing.T) {
 	for _, tt := range []struct {
 		payload string
@@ -286,6 +341,13 @@ func TestParseRejects(t *testing.T) {
 		{"characters cut short in a character", 0x390B, "00 00 01 15 05 01 41 03 00 00 00", game.ErrLayout},
 		{"characters without its trailer", 0x390B, "00 00 01 15 05 01 41 03 00 00 00 00 00 00 00 00 00 00 00 06 00 00 00 01 81 e0 d7 f8 a0 01 00 00 00 00 00 00 00 00 00 00 00", game.ErrLayout},
 		{"account whose Server is not repeated", 0x3906, "00 00 00 01 41 01 00 00 03 31 3a 42 17 05 01 00 00 00 00 18 05 03 09 03", game.ErrLayout},
+		{"account of the newer form whose Server is not repeated", 0x3906, "00 00 00 01 41 01 00 00 03 31 3a 42 06 09 02 00 00 00 00 00 00 07 09 03", game.ErrLayout},
+		{"account of the newer form cut before its 03", 0x3906, "00 00 00 01 41 01 00 00 03 31 3a 42 06 09 02 00 00 00 00 00 00 06 09", game.ErrLayout},
+		{"account with a byte too many", 0x3906, "00 00 00 01 41 01 00 00 03 31 3a 42 06 09 02 00 00 00 00 00 00 06 09 03 00", game.ErrLayout},
+		{"join cut short", 0x390D, "00 00 00 06", game.ErrLayout},
+		{"join whose first bytes are not 0", 0x390D, "00 00 01 06 09", game.ErrLayout},
+		{"join of server 0", 0x390D, "00 00 00 00 00", game.ErrLayout},
+		{"join with a byte too many", 0x390D, "00 00 00 06 09 00", game.ErrLayout},
 		{"account whose ID has no colon", 0x3906, "00 00 00 01 41 01 00 00 01 42 17 05 01 00 00 00 00 17 05 03 09 03", game.ErrLayout},
 		{"characters whose trailer is not 01 01", 0x390B, "00 00 00 01 02", game.ErrLayout},
 		{"characters on server 0", 0x390B, "00 00 01 00 00 01 41 03 00 00 00 00 00 00 00 00 00 00 00 06 00 00 00 01 81 e0 d7 f8 a0 01 00 00 00 00 00 00 00 00 00 00 00 01 01", game.ErrLayout},

@@ -2,6 +2,7 @@ package game
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"strings"
 	"time"
@@ -250,6 +251,19 @@ func redirect(r *reader) Event {
 	return d
 }
 
+// join parses the server the client picked in the lobby from a frame
+func join(r *reader) Event {
+	if r.u16() != 0 || r.u8() != 0 {
+		r.bad = true // 00 00 00 so far
+	}
+	j := Join{Server: r.u16()}
+	if j.Server == 0 {
+		r.bad = true
+	}
+	r.end()
+	return j
+}
+
 // account parses who logged in to the lobby from a frame
 func account(r *reader) Event {
 	if r.u16() != 0 || r.u8() != 0 {
@@ -267,12 +281,14 @@ func account(r *reader) Event {
 	}
 	a.ID, a.Session[1] = id, session
 	a.Server = r.u16()
-	r.skip(5) // 01, then a u32 0 so far
-	if r.u16() != a.Server {
+	a.Faction = r.u8() // 01 on a Light server, 02 on a Dark one so far
+
+	// What follows is nine bytes that hold the Server again. In older captures four zeros come before it, and 03 09 03 after,
+	// in the one from 10 October 2026 six zeros come before it, and a bare 03 after.
+	t := r.take(9)
+	if t != nil && binary.LittleEndian.Uint16(t[4:]) != a.Server && binary.LittleEndian.Uint16(t[6:]) != a.Server {
 		r.bad = true
 	}
-
-	r.skip(3) // 03 09 03 so far
 	r.end()
 
 	return a

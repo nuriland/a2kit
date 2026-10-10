@@ -15,7 +15,7 @@ var opcodes = map[wire.Opcode]op{
 	// 36: the login, the world, and its clocks
 	0x3600: {"Tick", tick},
 	0x3603: {"Ping", ping},
-	0x3611: {"Handshake", nil}, // a login's first frame
+	0x3611: {"Handshake", nil}, // a login's first frame: 00 00, a u32 60000, a varint 256 and that many random bytes, then 12 more (8 zeros, f9 ff ff ff)
 	0x3615: {"Login", nil},     // the login time, that time plus 8 h, and the account
 	0x361A: {"NameCheck", nameCheck},
 	0x3623: {"Zone", zone},
@@ -25,12 +25,12 @@ var opcodes = map[wire.Opcode]op{
 	0x3645: {"Player", player},
 
 	// 39: the lobby, which lists the servers and hands the client to the one picked
-	0x3901: {"LobbyHandshake", nil}, // the lobby's first frame
+	0x3901: {"LobbyHandshake", nil}, // the lobby's first frame: 00 00, a u16 60, a varint 256 and that many random bytes, then 10 zeros
 	0x3903: {"LobbyPing", lobbyPing},
 	0x3906: {"Account", account},
 	0x3909: {"Servers", servers},
 	0x390B: {"Characters", characters},
-	0x390D: {"Join", nil}, // the server picked
+	0x390D: {"Join", join}, // the server picked
 	0x390F: {"Redirect", redirect},
 
 	// 37: movement

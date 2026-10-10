@@ -76,10 +76,16 @@ func (d Redirect) Addr() (netip.AddrPort, bool) {
 	return netip.AddrPortFrom(ip, d.Port), err == nil
 }
 
+// Join is the server the client picked in the lobby, sent before the Redirect to it.
+type Join struct {
+	Server uint16 // the ID in Servers, the same as the Redirect's
+}
+
 // Account is who logged in to the lobby.
 type Account struct {
 	ID      string    // the account's number
 	Server  uint16    // likely the one joined last, the ID in Servers
+	Faction byte      // the side it plays, 1 for Light (Elyos) and 2 for Dark (Asmodians), as in Server.Faction
 	Session [2]string // two GUIDs, new at every login (unsure which one is which, or what they are used for)
 }
 
@@ -98,7 +104,7 @@ type Character struct {
 	Level  uint32    // the character's level
 	Exp    uint32    // @TODO: not sure what this is, but it's sent for every character
 	Code   uint32    // 5 to 44 so far, not read
-	Flags  byte      // 1, and 2 on one placeholder, not read
+	Flags  byte      // likely its side, 1 for Light (Elyos) and 2 for Dark (Asmodians) as in Server.Faction, not read
 	Mask   byte      // its two bits of the byte after every fourth character, not read
 	Time   time.Time // likely when it was last played
 }
@@ -109,5 +115,6 @@ func (c Character) String() string { return fmt.Sprintf("%d:%s/%d", c.Server, c.
 func (Servers) event()    {}
 func (LobbyPing) event()  {}
 func (Redirect) event()   {}
+func (Join) event()       {}
 func (Account) event()    {}
 func (Characters) event() {}
