@@ -1,0 +1,5 @@
+00 8D game.Stats {Entity:5165 Values:[{ID:1 Value:1500} {ID:8 Value:1500} {ID:10 Value:100000} {ID:12 Value:100000} {ID:0 Value:119} {ID:7 Value:119}]}
+00 8D game.Stats {Entity:5165 Values:[{ID:5 Value:30000} {ID:6 Value:0}]}
+00 8D game.Stats {Entity:5165 Values:[{ID:5 Value:50000}]}
+00 8D game.Stats {Entity:43643 Values:[{ID:0 Value:115}]}
+00 8D game.Stats {Entity:5165 Values:[{ID:0 Value:117}]}

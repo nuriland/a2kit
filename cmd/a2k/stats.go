@@ -177,11 +177,13 @@ func writeTable(w io.Writer, a *a2kit.Analysis, marks []time.Time, window time.D
 }
 
 // note says what is known of a type.
-// The lock counts it, and it comes whether the player acts or not.
+// The lock counts it, and it comes whether the player acts or not. A type that is guessed is read, but the lock does not count it.
 func note(op wire.Opcode, background bool) string {
 	var notes []string
 	if op.Known() {
 		notes = append(notes, "known")
+	} else if op.Guessed() {
+		notes = append(notes, "guessed")
 	}
 	if background {
 		notes = append(notes, "background")

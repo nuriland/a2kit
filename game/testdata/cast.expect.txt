@@ -1,7 +1,9 @@
-02 38 game: not read
-02 38 game.Cast {Actor:15943 Target:15943 Skill:11030000 Pos:{X:-25784.588 Y:-33925.99 Z:18093.855}}
-02 38 game.Cast {Actor:15943 Target:37365 Skill:11020000 Pos:{X:-25712.445 Y:-34181.098 Z:18067.809}}
-02 38 game.Cast {Actor:37365 Target:15943 Skill:1231220 Pos:{X:-25830.9 Y:-33949.13 Z:18086}}
-02 38 game.Cast {Actor:33204 Target:15943 Skill:1230790 Pos:{X:-25844.92 Y:-35503.35 Z:17897.758}}
+02 38 game.Cast {Actor:14692 Target:14692 Skill:14050008 Angle:289.69864 Pos:{X:0 Y:0 Z:0} Duration:0}
+02 38 game.Cast {Actor:15943 Target:15943 Skill:11030000 Angle:-82.24831 Pos:{X:-25784.588 Y:-33925.99 Z:18093.855} Duration:0}
+02 38 game.Cast {Actor:15943 Target:37365 Skill:11020000 Angle:-65.654495 Pos:{X:-25712.445 Y:-34181.098 Z:18067.809} Duration:0}
+02 38 game.Cast {Actor:37365 Target:15943 Skill:1231220 Angle:117.95723 Pos:{X:-25830.9 Y:-33949.13 Z:18086} Duration:1000}
+02 38 game.Cast {Actor:33204 Target:15943 Skill:1230790 Angle:62.40274 Pos:{X:-25844.92 Y:-35503.35 Z:17897.758} Duration:20000}
 06 38 game.CastEnd {Actor:15943 Skill:11020000}
 06 38 game.CastEnd {Actor:37365 Skill:1231220}
+02 38 game.Cast {Actor:5165 Target:5165 Skill:12730002 Angle:343.43774 Pos:{X:0 Y:0 Z:0} Duration:0}
+02 38 game.Cast {Actor:5165 Target:64288 Skill:12730001 Angle:172.54152 Pos:{X:0 Y:0 Z:0} Duration:0}

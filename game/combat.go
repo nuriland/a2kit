@@ -1,6 +1,9 @@
 package game
 
 // Hit is the damage one skill deals one target, from 04 38.
+//
+// Damage is 0 on a hit that deals none, which is a form of its own and never otherwise 0. Skills
+// 4001 and 4002 of the player send it with the player for the target as well, and others do.
 type Hit struct {
 	Actor, Target   Entity
 	Skill           Skill
@@ -11,11 +14,17 @@ type Hit struct {
 	Mods, Direction byte     // with some hits, else 0; their bits are not read
 }
 
-// Cast opens a skill use, from 02 38. Its position is the target's.
+// Cast opens a skill use, from 02 38. Its position is the target's, and the zero value on the short
+// form, which also comes with another entity as the target.
+//
+// For skills 4001 and 4002 Pos is not a position: its X and Y are a vector of length 100 and Z is 0.
+// Angle is a direction in degrees, as far as its range can tell.
 type Cast struct {
 	Actor, Target Entity
 	Skill         Skill
+	Angle         float32
 	Pos
+	Duration uint32 // a guess: milliseconds, 500 to 10000, and 0 on the short form
 }
 
 // CastEnd closes the skill use a Cast opened, from 06 38.

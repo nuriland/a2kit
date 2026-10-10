@@ -2,11 +2,17 @@ package game
 
 import "testing"
 
-// KnownOnly keeps only known opcodes, so one that game reads and wire does not know never reaches Parse.
+// KnownOnly keeps only known and guessed opcodes, so one that game reads and wire does not list never reaches Parse.
 func TestReadsKnown(t *testing.T) {
 	for op, o := range opcodes {
-		if o.read != nil && !op.Known() {
+		_, guess := guesses[op]
+		switch {
+		case o.read != nil && !op.Known() && !op.Guessed():
 			t.Errorf("%v %s is read, but wire does not know it", op, o.name)
+		case guess && op.Known() && op.Guessed():
+			t.Errorf("%v %s is both known and guessed in wire", op, o.name)
+		case !guess && op.Guessed():
+			t.Errorf("%v %s is guessed in wire, and not in game", op, o.name)
 		}
 	}
 }
