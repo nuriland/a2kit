@@ -273,6 +273,22 @@ func TestParseServersGroups(t *testing.T) {
 	}
 }
 
+// Both forms of the lead the flag's 0x08 bit chooses, with the one extra byte when it's set.
+func TestParseTurn(t *testing.T) {
+	for _, tt := range []struct {
+		name, payload string
+		want          game.Turn
+	}{
+		{"short lead", "64 02 11 22 34 12 34 12 01", game.Turn{Entity: 100, Heading: 0x1234}},
+		{"long lead", "ac 02 08 33 44 55 cd ab cd ab 01", game.Turn{Entity: 300, Heading: 0xABCD}},
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: 0x371D, Payload: unhex(t, tt.payload)})
+		if err != nil || e != tt.want {
+			t.Errorf("%s: got %+v, %v; want %+v", tt.name, e, err, tt.want)
+		}
+	}
+}
+
 func TestParseJoin(t *testing.T) {
 	e, err := game.Parse(wire.Frame{Opcode: 0x390D, Payload: unhex(t, "00 00 00 06 09")})
 	if want := (game.Join{Server: 2310}); err != nil || e != want {
@@ -317,6 +333,10 @@ func TestParseRejects(t *testing.T) {
 		{"hit with switch nibble 6 cut in its three bytes", 0x3804, "c7 7c 06 00 f5 a3 02 e0 26 a8 00 00 02 00 00", game.ErrLayout},
 		{"hit with switch nibble 5", 0x3804, "c7 7c 05 00 f5 a3 02 e0 26 a8 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 90 4e 20 01 00", game.ErrUnread},
 		{"hit whose type does not fit a byte", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 ac 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00", game.ErrLayout},
+		{"turn cut short", 0x371D, "64 02 11 22 34 12 34 12", game.ErrLayout},
+		{"turn whose heading is not repeated", 0x371D, "64 02 11 22 34 12 00 00 01", game.ErrLayout},
+		{"turn whose trailer is not 01", 0x371D, "64 02 11 22 34 12 34 12 02", game.ErrLayout},
+		{"turn with a byte too many", 0x371D, "64 02 11 22 34 12 34 12 01 00", game.ErrLayout},
 		{"hit whose trailer is not its sequence number", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 02 00", game.ErrLayout},
 		{"hit with bytes after the trailer", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00 ff", game.ErrLayout},
 		{"hit claiming more extra hits than bytes", 0x3804, "c7 7c 24 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 7f 01 00", game.ErrLayout},

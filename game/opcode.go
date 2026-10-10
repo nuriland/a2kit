@@ -37,7 +37,7 @@ var opcodes = map[wire.Opcode]op{
 	0x371A: {"Move", moveA},
 	0x371B: {"Move", moveB},
 	0x371C: {"Move", moveB},
-	0x371D: {"Move", nil}, // 9–12 bytes, a sibling
+	0x371D: {"Turn", turn}, // a lighter update than Move, with no position
 
 	// 38: skills
 	0x3802: {"Cast", cast},

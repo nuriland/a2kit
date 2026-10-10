@@ -178,6 +178,25 @@ func ping(r *reader) Event {
 	return p
 }
 
+// turn parses a lighter movement update, with no position, from a frame
+func turn(r *reader) Event {
+	t := Turn{Entity: r.entity()}
+	flag := r.u8()
+	r.skip(2) // changes with the entity's movement, not understood
+	if flag&0x08 != 0 {
+		r.skip(1) // one more byte, seen only when this bit is set
+	}
+	t.Heading = r.u16()
+	if r.u16() != t.Heading {
+		r.bad = true // sent twice, always the same so far
+	}
+	if r.u8() != 1 {
+		r.bad = true // 01 so far
+	}
+	r.end()
+	return t
+}
+
 // zone parses a zone event from a frame
 func zone(r *reader) Event {
 	if r.varint() != 0 {

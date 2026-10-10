@@ -23,6 +23,15 @@ type Move struct {
 	Pos
 }
 
+// Turn is a lighter update than Move, with no position.
+//
+// Every sample seen so far sends Heading twice, always the same value, so what a change would
+// look like, or whether this is a heading at all, is not confirmed.
+type Turn struct {
+	Entity  Entity
+	Heading uint16
+}
+
 // Zone places the client's character in the world after a zone change
 type Zone struct{ Pos }
 
@@ -36,5 +45,6 @@ type NameCheck struct {
 func (Spawn) event()     {}
 func (Player) event()    {}
 func (Move) event()      {}
+func (Turn) event()      {}
 func (Zone) event()      {}
 func (NameCheck) event() {}
