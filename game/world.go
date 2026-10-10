@@ -1,6 +1,7 @@
 package game
 
-// Spawn announces a mob or summon entering view
+// Spawn announces a mob or summon entering view, from 41 36. 34 36 announces the entities that
+// stood still the whole recording, which a2k has seen no Move or Death of.
 type Spawn struct {
 	Entity Entity
 	NPC    NPC
@@ -25,11 +26,29 @@ type Move struct {
 
 // Turn is a lighter update than Move, with no position.
 //
-// Every sample seen so far sends Heading twice, always the same value, so what a change would
-// look like, or whether this is a heading at all, is not confirmed.
+// Its two u16 are the same value on most updates, and a few units apart on the rest, which fits a
+// current and a target direction, but which is which is not confirmed, nor whether either is a
+// heading at all.
 type Turn struct {
-	Entity  Entity
-	Heading uint16
+	Entity   Entity
+	Heading  uint16
+	Heading2 uint16
+}
+
+// Stats is the attributes of an entity that changed, from 00 8D, as their ids and values in the order sent.
+//
+// The ids are not named, but they pair up: ids 0 to 6 hold a value, and id n+7 holds its maximum.
+// Id 1 reads like hit points, 1500 at most on the player and 1605 on one mob; it falls 120 at
+// a time while damage over time ticks, and 3 is a gauge from 0 to 100000.
+type Stats struct {
+	Entity Entity
+	Values []Stat
+}
+
+// Stat is one of an entity's attributes: an id and its value.
+type Stat struct {
+	ID    byte
+	Value uint64
 }
 
 // Heading is an entity's current and turning direction, with its speed.
@@ -58,6 +77,7 @@ func (Spawn) event()     {}
 func (Player) event()    {}
 func (Move) event()      {}
 func (Turn) event()      {}
+func (Stats) event()     {}
 func (Heading) event()   {}
 func (Zone) event()      {}
 func (NameCheck) event() {}

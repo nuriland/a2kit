@@ -141,6 +141,8 @@ func fields(e game.Event) string {
 				fmt.Fprintf(&b, "%.1f", x)
 			case time.Time:
 				b.WriteString(x.Local().Format("15:04:05.000"))
+			case []byte:
+				fmt.Fprintf(&b, "%x", x)
 			case string:
 				if strings.ContainsAny(x, " \"=") {
 					x = fmt.Sprintf("%q", x)

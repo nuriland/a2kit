@@ -188,7 +188,7 @@ func (d *Decoder) emit(st *stream, body []byte, flags Flags) {
 	if flags&FromClient != 0 && !d.config.EmitClient {
 		return
 	}
-	if d.config.KnownOnly && !op.Known() {
+	if d.config.KnownOnly && !op.listed() {
 		return
 	}
 	f := Frame{
