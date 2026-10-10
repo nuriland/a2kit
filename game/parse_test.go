@@ -289,6 +289,34 @@ func TestParseTurn(t *testing.T) {
 	}
 }
 
+// 28/29 37 carry a position before the shared heading tail.
+func TestParseHeadingWithPos(t *testing.T) {
+	e, err := game.Parse(wire.Frame{Opcode: 0x3728, Payload: unhex(t,
+		"64 04 00 00 80 42 00 00 a0 42 00 00 c0 42 00 00 90 42 00 00 a8 42 00 00 70 41 11 22 01")})
+	want := game.Heading{Entity: 100, Pos: game.Pos{X: 64, Y: 80, Z: 96},
+		Heading1: 72, Heading2: 84, Speed: 15}
+	if err != nil || e != want {
+		t.Errorf("got %+v, %v; want %+v", e, err, want)
+	}
+}
+
+// 2A 37 has no position, and its lead before the shared tail varies in length.
+func TestParseHeadingOnly(t *testing.T) {
+	for _, tt := range []struct {
+		name, lead string
+	}{
+		{"short lead", "12"},
+		{"long lead", "16 0d 05"},
+	} {
+		payload := unhex(t, tt.lead+" 00 00 80 42 00 00 a0 42 00 00 c0 42 11 22 01")
+		e, err := game.Parse(wire.Frame{Opcode: 0x372A, Payload: append(unhex(t, "64"), payload...)})
+		want := game.Heading{Entity: 100, Heading1: 64, Heading2: 80, Speed: 96}
+		if err != nil || e != want {
+			t.Errorf("%s: got %+v, %v; want %+v", tt.name, e, err, want)
+		}
+	}
+}
+
 func TestParseJoin(t *testing.T) {
 	e, err := game.Parse(wire.Frame{Opcode: 0x390D, Payload: unhex(t, "00 00 00 06 09")})
 	if want := (game.Join{Server: 2310}); err != nil || e != want {
@@ -337,6 +365,9 @@ func TestParseRejects(t *testing.T) {
 		{"turn whose heading is not repeated", 0x371D, "64 02 11 22 34 12 00 00 01", game.ErrLayout},
 		{"turn whose trailer is not 01", 0x371D, "64 02 11 22 34 12 34 12 02", game.ErrLayout},
 		{"turn with a byte too many", 0x371D, "64 02 11 22 34 12 34 12 01 00", game.ErrLayout},
+		{"heading too short for its tail", 0x372A, "64 12 00 00 80 42 00 00 a0 42 00 00 c0 42 11", game.ErrLayout},
+		{"heading whose trailer is not 01", 0x3728, "64 04 00 00 80 42 00 00 a0 42 00 00 c0 42 00 00 90 42 00 00 a8 42 00 00 70 41 11 22 02", game.ErrLayout},
+		{"heading with a byte too many", 0x372A, "64 12 00 00 80 42 00 00 a0 42 00 00 c0 42 11 22 01 00", game.ErrLayout},
 		{"hit whose trailer is not its sequence number", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 02 00", game.ErrLayout},
 		{"hit with bytes after the trailer", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00 ff", game.ErrLayout},
 		{"hit claiming more extra hits than bytes", 0x3804, "c7 7c 24 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 7f 01 00", game.ErrLayout},

@@ -1,0 +1,1 @@
+2A 37 game.Heading {Entity:100 Pos:{X:0 Y:0 Z:0} Heading1:64 Heading2:80 Speed:96}

@@ -37,7 +37,10 @@ var opcodes = map[wire.Opcode]op{
 	0x371A: {"Move", moveA},
 	0x371B: {"Move", moveB},
 	0x371C: {"Move", moveB},
-	0x371D: {"Turn", turn}, // a lighter update than Move, with no position
+	0x371D: {"Turn", turn},              // a lighter update than Move, with no position
+	0x3728: {"Heading", headingWithPos}, // flag 04, with a position
+	0x3729: {"Heading", headingWithPos}, // flag 02, with a position
+	0x372A: {"Heading", headingOnly},    // no position
 
 	// 38: skills
 	0x3802: {"Cast", cast},

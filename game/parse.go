@@ -197,6 +197,39 @@ func turn(r *reader) Event {
 	return t
 }
 
+// headingWithPos parses 28 37 and 29 37's entity, position and heading from a frame
+func headingWithPos(r *reader) Event {
+	h := Heading{Entity: r.entity()}
+	r.skip(1) // 04 on 28 37, 02 on 29 37, likely redundant with the opcode
+	h.Pos = r.pos()
+	return heading(r, h)
+}
+
+// headingOnly parses 2A 37's entity and heading from a frame, with no position
+func headingOnly(r *reader) Event {
+	h := Heading{Entity: r.entity()}
+	if n := r.left() - 15; n >= 0 {
+		r.skip(n) // not understood; its length varies
+	} else {
+		r.bad = true
+	}
+	return heading(r, h)
+}
+
+// heading reads the 15 bytes 28 37, 29 37 and 2A 37 end with: two headings, a speed, a changing
+// u16 not understood, and a trailing 01.
+func heading(r *reader, h Heading) Event {
+	h.Heading1 = r.f32()
+	h.Heading2 = r.f32()
+	h.Speed = r.f32()
+	r.skip(2) // changes often, not understood
+	if r.u8() != 1 {
+		r.bad = true // 01 so far
+	}
+	r.end()
+	return h
+}
+
 // zone parses a zone event from a frame
 func zone(r *reader) Event {
 	if r.varint() != 0 {

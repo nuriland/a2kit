@@ -32,6 +32,18 @@ type Turn struct {
 	Heading uint16
 }
 
+// Heading is an entity's current and turning direction, with its speed.
+//
+// 28 37 and 29 37 also carry its position; 2A 37 doesn't, and Pos is the zero value then. What
+// tells 28 37 apart from 29 37, what precedes 2A 37's fields when there's no position, and which
+// of Heading1 and Heading2 is the current direction and which, if either, is a target, are not
+// understood. Speed is zero at rest in every sample seen so far, which fits that name.
+type Heading struct {
+	Entity                    Entity
+	Pos                       // the zero value when this update carries none
+	Heading1, Heading2, Speed float32
+}
+
 // Zone places the client's character in the world after a zone change
 type Zone struct{ Pos }
 
@@ -46,5 +58,6 @@ func (Spawn) event()     {}
 func (Player) event()    {}
 func (Move) event()      {}
 func (Turn) event()      {}
+func (Heading) event()   {}
 func (Zone) event()      {}
 func (NameCheck) event() {}
