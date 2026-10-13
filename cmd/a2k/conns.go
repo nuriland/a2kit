@@ -47,6 +47,7 @@ func conns(o *options, name string, all bool) error {
 	if name == "-" {
 		return usagef("conns reads a recording by its name, not stdin")
 	}
+	o.file = name
 
 	cs, err := a2kit.Connections(name, o.config())
 	switch {

@@ -200,11 +200,23 @@ func (o *options) openOutput(live bool) (*output, error) {
 	if o.out == "" {
 		return &output{Writer: bufio.NewWriter(o.stdout), live: live}, nil
 	}
+	if same(o.out, o.file) {
+		return nil, usagef("-o %s is the FILE being read, and creating it would empty it", o.out)
+	}
 	f, err := os.Create(o.out)
 	if err != nil {
 		return nil, err
 	}
 	return &output{Writer: bufio.NewWriter(f), live: live, f: f}, nil
+}
+
+func same(a, b string) bool {
+	fa, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	fb, err := os.Stat(b)
+	return err == nil && os.SameFile(fa, fb)
 }
 
 // close closes what the command opened, in order.

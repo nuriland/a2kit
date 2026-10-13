@@ -95,6 +95,7 @@ func stats(o *options, name string, v views) error {
 	if name == "-" {
 		return usagef("stats reads a recording by its name, not stdin")
 	}
+	o.file = name
 
 	a, err := a2kit.Analyze(name, o.config())
 	if err != nil {
