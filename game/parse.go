@@ -38,13 +38,16 @@ func hit(r *reader) Event {
 		h  = Hit{Target: r.entity()}
 		sw = r.varint()
 	)
+
 	r.varint() // 0 so far
 	h.Actor = r.entity()
 	h.Skill = r.skill()
 	r.skip(1) // the actor's hit count
+
 	h.Type = r.small()
+
 	switch sw & 0xF {
-	case 4:
+	case 0, 4:
 	case 6:
 		h.Mods = r.u8()
 		r.skip(1) // 00
@@ -53,9 +56,13 @@ func hit(r *reader) Event {
 		return nil // a form no fixture has
 	}
 	r.skip(4) // varies with the skill, not a float
+
 	seq := r.u32()
 	h.Scalar = r.varint()
-	h.Damage = r.varint()
+
+	if sw&0xF != 0 {
+		h.Damage = r.varint()
+	}
 	if sw&0x20 != 0 {
 		n := r.varint()
 		if n > uint32(r.left()) {
@@ -76,13 +83,26 @@ func hit(r *reader) Event {
 
 // spawn parses a spawn event from a frame
 func spawn(r *reader) Event {
-	s := Spawn{Entity: r.entity(), Mask: r.u32()}
-	if r.u8()&1 != 0 {
-		return nil // a name follows; no fixture
-	}
+	s := Spawn{Entity: r.entity(), Mask: r.u16()}
+	r.varint()
 	s.NPC = r.npc()
-	r.skip(2)
+	flags := r.u8()
+	if r.u8() != 2 {
+		r.bad = true
+	}
+
 	s.Pos = r.pos()
+	s.Heading = r.f32()
+	r.skip(2) // the heading again, as a 16-bit angle
+
+	if flags&8 != 0 {
+		r.skip(12) // three floats near 0
+	}
+	if r.u8() != 1 { // 01 so far
+		r.bad = true
+	}
+
+	s.HP, s.MaxHP = r.varint(), r.varint()
 	return s
 }
 
@@ -101,6 +121,7 @@ func death(r *reader) Event {
 func owner(r *reader) Event {
 	o := Owner{Entity: r.entity(), Skill: r.skill(), Actor: r.entity()}
 	r.varint() // 504 so far
+
 	o.Name = r.name()
 	return o
 }
@@ -115,6 +136,7 @@ func self(r *reader) Event { return character(r, true) }
 func character(r *reader, self bool) Event {
 	p := Player{Entity: r.entity(), Self: self}
 	r.skip(4) // a mask, like Spawn's
+
 	if r.u8()&1 != 0 {
 		p.Name = r.name()
 	}
@@ -124,15 +146,24 @@ func character(r *reader, self bool) Event {
 // cast parses a cast event from a frame
 func cast(r *reader) Event {
 	c := Cast{Actor: r.entity()}
-	r.skip(1)
+	r.skip(1) // 00 so far
+
 	c.Skill = r.skill()
-	r.skip(2)
+	r.skip(1) // counts the actor's casts
+
+	placed := r.u8() == 2 // 02 with a position, 00 without
 	c.Target = r.entity()
-	if r.left() < 16 {
-		return nil // the short self-cast form, without a position
+	r.skip(4) // likely the heading, in degrees
+
+	if placed {
+		c.Pos = r.pos()
 	}
-	r.skip(4)
-	c.Pos = r.pos()
+
+	r.varint() // the actor's Scalar, as in Hit
+	r.skip(1)  // 01 or 02 so far
+
+	r.varint() // 0 mostly, else 150 to 111700
+	r.end()
 	return c
 }
 

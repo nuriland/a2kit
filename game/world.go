@@ -2,9 +2,11 @@ package game
 
 // Spawn announces a mob or summon entering view
 type Spawn struct {
-	Entity Entity
-	NPC    NPC
-	Mask   uint32 // its low byte varies with the kind of entity
+	Entity    Entity
+	NPC       NPC
+	Mask      uint16  // its low byte varies with the kind of entity
+	Heading   float32 // degrees
+	HP, MaxHP uint32  // HP never passes MaxHP, and MaxHP is one value per NPC
 	Pos
 }
 

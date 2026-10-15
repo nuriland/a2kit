@@ -70,14 +70,14 @@ func tracks(evs []traced, pid int) []string {
 
 func TestFight(t *testing.T) {
 	evs := traceOf(t, logOf(t, Config{},
-		"0 02 38 server x3wA4CaoAAAA9aMCAAAAAAAAAAAAAAAAAAAAAA==",   // 15943 casts Keen Strike
-		"5 04 38 server x3wEAPWjAuAmqAAAAkvtn0EBAAAAkE4kAQA=",       // 37365 hits 15943
-		"12 05 38 server x3wC9aMCAOAmqAAk",                          // unread
-		"40 04 38 server x3wEAPWjAuAmqAAAAks=",                      // a hit cut short
-		"100 02 38 server x3wA4CaoAAAA9aMCAAAAAAAAAAAAAAAAAAAAAA==", // cast again before the first ended
-		"470 06 38 server x3zgJqgAAQw=",                             // the cast ends
-		"480 02 38 server x3wA4CaoAAAA9aMCAAAAAAAAAAAAAAAAAAAAAA==", // and never ends
-		"510 42 36 server x3wAAw==",                                 // 15943 dies
+		"0 02 38 server x3wA4CaoAAAC9aMCAAAAAAAAAAAAAAAAAAAAAJBOAQA=",   // 15943 casts Keen Strike
+		"5 04 38 server x3wEAPWjAuAmqAAAAkvtn0EBAAAAkE4kAQA=",           // 37365 hits 15943
+		"12 05 38 server x3wC9aMCAOAmqAAk",                              // unread
+		"40 04 38 server x3wEAPWjAuAmqAAAAks=",                          // a hit cut short
+		"100 02 38 server x3wA4CaoAAAC9aMCAAAAAAAAAAAAAAAAAAAAAJBOAQA=", // cast again before the first ended
+		"470 06 38 server x3zgJqgAAQw=",                                 // the cast ends
+		"480 02 38 server x3wA4CaoAAAC9aMCAAAAAAAAAAAAAAAAAAAAAJBOAQA=", // and never ends
+		"510 42 36 server x3wAAw==",                                     // 15943 dies
 	))
 
 	type span struct {
@@ -115,11 +115,11 @@ func TestFight(t *testing.T) {
 
 func TestNames(t *testing.T) {
 	evs := traceOf(t, logOf(t, Config{Client: true},
-		"0 45 36 server 5HIBIAAABwZQbGF5ZXI=",                 // 14692 is Player
-		"1 04 8D server 9aMCYEGuAMd8+AMHUGxheWVyMg==",         // 37365 is owned by 15943, Player2
-		"2 45 36 server x3wBIAAABg==",                         // 15943 again, without a name
-		"3 41 36 server qIECBSAAAABKDyAAAAAAAAAAAAAAAAAAAAA=", // 32936 spawns as NPC 2101066
-		"4 1A 37 server BQAAAADAfwAAAAAAAAAA",                 // 5 moves to NaN
+		"0 45 36 server 5HIBIAAABwZQbGF5ZXI=",                             // 14692 is Player
+		"1 04 8D server 9aMCYEGuAMd8+AMHUGxheWVyMg==",                     // 37365 is owned by 15943, Player2
+		"2 45 36 server x3wBIAAABg==",                                     // 15943 again, without a name
+		"3 41 36 server qIECBSAASg8gAAACAAAAAAAAAAAAAAAAAAAAAAAAAccBxwE=", // 32936 spawns as NPC 2101066
+		"4 1A 37 server BQAAAADAfwAAAAAAAAAA",                             // 5 moves to NaN
 		"5 04 38 client x3w=",
 	))
 	if want := []string{"Player", "Player2", "npc 2101066", "entity 37365"}; !slices.Equal(tracks(evs, byEntity), want) {

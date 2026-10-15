@@ -1,14 +1,16 @@
 package game
 
-// Hit is the damage one skill deals one target, from 04 38.
+// Hit is one skill landing on a target
+//
+// @REVIEW: fields and documentation
 type Hit struct {
 	Actor, Target   Entity
 	Skill           Skill
-	Damage          uint32
-	Extra           []uint32 // a tenth of Damage each, on some hits; not more damage
+	Damage          uint32   // the amount of damage dealt, unless it's a buff, then it's 0
+	Extra           []uint32 // a tiny share of Damage each
 	Type            byte     // 3 on the hits that look critical, else 2
-	Scalar          uint32   // 10000 so far
-	Mods, Direction byte     // with some hits, else 0; their bits are not read
+	Scalar          uint32   // 10000, 10910, 12491 or 13491 so far, one value per actor
+	Mods, Direction byte     // with some hits, else 0
 }
 
 // Cast opens a skill use, from 02 38. Its position is the target's.

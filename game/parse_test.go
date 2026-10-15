@@ -93,6 +93,23 @@ func TestParseHit(t *testing.T) {
 	}
 }
 
+// A cast's byte after the counter says whether a position follows, 02, or not, 00.
+func TestParseCast(t *testing.T) {
+	for _, tt := range []struct {
+		payload string
+		want    game.Cast
+	}{
+		{"e4 72 00 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00", game.Cast{Actor: 14692, Target: 14692, Skill: 14050008}},
+		{"c7 7c 00 f0 4d a8 00 04 02 c7 7c 22 7f a4 c2 2d 71 c9 c6 fd 85 04 c7 b6 5b 8d 46 90 4e 01 00", game.Cast{Actor: 15943, Target: 15943, Skill: 11030000, Pos: game.Pos{X: -25784.588, Y: -33925.99, Z: 18093.855}}},
+		{"bd 1a 00 54 fc ea 00 02 00 bd 1a 4d c3 aa 42 cb 61 01 94 b3 03", game.Cast{Actor: 3389, Target: 3389, Skill: 15400020}}, // a trailer past 0
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: 0x3802, Payload: unhex(t, tt.payload)})
+		if err != nil || !reflect.DeepEqual(e, tt.want) {
+			t.Errorf("got %+v, %v; want %+v", e, err, tt.want)
+		}
+	}
+}
+
 // The byte before every fourth server's Status holds two bits a server, and its faction is read.
 func TestParseServers(t *testing.T) {
 	payload := unhex(t, "00 00 03"+
@@ -263,14 +280,17 @@ func TestParseRejects(t *testing.T) {
 		{"hit with switch nibble 5", 0x3804, "c7 7c 05 00 f5 a3 02 e0 26 a8 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 90 4e 20 01 00", game.ErrUnread},
 		{"hit whose type does not fit a byte", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 ac 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00", game.ErrLayout},
 		{"hit whose trailer is not its sequence number", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 02 00", game.ErrLayout},
+		{"hit without damage whose trailer is not its sequence number", 0x3804, "bd 1a 00 00 bd 1a 54 fc ea 00 02 02 db 90 ca 5b 01 00 00 00 cb 61 02 00", game.ErrLayout},
 		{"hit with bytes after the trailer", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00 ff", game.ErrLayout},
 		{"hit claiming more extra hits than bytes", 0x3804, "c7 7c 24 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 7f 01 00", game.ErrLayout},
 		{"death with a byte too many", 0x3642, "f5 a3 02 00 03 00", game.ErrLayout},
 		{"death whose middle varint is not zero", 0x3642, "f5 a3 02 01 03", game.ErrLayout},
-		{"cast without a position", 0x3802, "e4 72 00 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00", game.ErrUnread},
+		{"cast with a byte too many", 0x3802, "e4 72 00 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00 00", game.ErrLayout},
+		{"cast whose flag says a position it does not have", 0x3802, "e4 72 00 d8 62 d6 00 0b 02 e4 72 6d d9 90 43 90 4e 01 00", game.ErrLayout},
 		{"cast end with a byte too many", 0x3806, "c7 7c e0 26 a8 00 01 0c 00", game.ErrLayout},
 		{"move 1B 37 whose flag adds a byte it does not have", 0x371B, "e4 72 05 03 2b d5 bc c6 01 6f 24 c7 6a 42 8c", game.ErrLayout},
-		{"spawn with a name", 0x3641, "a8 81 02 05 20 00 00 01 4a 0f 20 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00", game.ErrUnread},
+		{"spawn in the layout before October 2026", 0x3641, "a8 81 02 05 20 00 00 00 4a 0f 20 00 00 02 49 f3 d2 c6 e5 d0 00 c7 00 dc 8b 46 7f f8 13 43 39 69 01 c7 01 c7 01", game.ErrLayout},
+		{"spawn whose heading is not followed by 01", 0x3641, "d4 86 01 04 20 00 ce b9 2c 00 00 02 3c bc f3 c7 df 86 d0 c7 00 a8 c0 46 00 5c 94 43 00 d3 02 f3 17 f3 17", game.ErrLayout},
 		{"player whose name is cut short", 0x3645, "e4 72 01 20 00 00 07 06 50 6c 61", game.ErrLayout},
 		{"owner whose name is not utf-8", 0x8D04, "f5 a3 02 60 41 ae 00 c7 7c f8 03 02 ff fe", game.ErrLayout},
 		{"ping a byte short", 0x3603, "00 00 5a 43 39 e5 23 3a 00 00 64 69 0c d3 a0 01 00", game.ErrLayout},
@@ -320,7 +340,7 @@ func TestParseOffset(t *testing.T) {
 		}
 	}
 	check(0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 01", "game: off the layout at byte 25 of 25")
-	check(0x3641, "a8 81 02 05 20 00 00 00 4a 0f", "game: off the layout at byte 8 of 10") // cut inside NPC; the reads after it must not move the byte
+	check(0x3641, "d4 87 02 04 20 00 74 ba", "game: off the layout at byte 6 of 8") // cut inside NPC; the reads after it must not move the byte
 }
 
 func unhex(t *testing.T, s string) []byte {
