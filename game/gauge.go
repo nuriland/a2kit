@@ -2,7 +2,7 @@ package game
 
 import "strconv"
 
-// Gauges is what changed of an entity's HP, MP and flight time.
+// Gauges is what changed of an entity's HP, MP, stamina and flight time.
 type Gauges struct {
 	Entity Entity
 	Rows   map[Gauge]uint64
@@ -12,15 +12,20 @@ type Gauges struct {
 type Gauge uint8
 
 const (
-	GaugeHP        Gauge = 0
-	GaugeMP        Gauge = 1
-	GaugeFlight    Gauge = 6
-	GaugeMaxHP     Gauge = 7
-	GaugeMaxMP     Gauge = 8
-	GaugeMaxFlight Gauge = 13
+	GaugeHP         Gauge = 0
+	GaugeMP         Gauge = 1
+	GaugeStamina    Gauge = 3
+	GaugeFlight     Gauge = 6
+	GaugeMaxHP      Gauge = 7
+	GaugeMaxMP      Gauge = 8
+	GaugeMaxStamina Gauge = 10
+	GaugeMaxFlight  Gauge = 13
 )
 
-var gaugeNames = map[Gauge]string{GaugeHP: "hp", GaugeMP: "mp", GaugeFlight: "flight", GaugeMaxHP: "max_hp", GaugeMaxMP: "max_mp", GaugeMaxFlight: "max_flight"}
+var gaugeNames = map[Gauge]string{
+	GaugeHP: "hp", GaugeMP: "mp", GaugeStamina: "stamina", GaugeFlight: "flight",
+	GaugeMaxHP: "max_hp", GaugeMaxMP: "max_mp", GaugeMaxStamina: "max_stamina", GaugeMaxFlight: "max_flight",
+}
 
 func (g Gauge) String() string {
 	if n, ok := gaugeNames[g]; ok {

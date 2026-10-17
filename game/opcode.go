@@ -12,7 +12,7 @@ type op struct {
 
 // opcodes is every opcode game has a name for.
 var opcodes = map[wire.Opcode]op{
-	// 36: the login, the world, and its clocks
+	// the login, the world, and its clocks
 	0x3600: {"Tick", tick},
 	0x3603: {"Ping", ping},
 	0x3611: {"Handshake", nil}, // a login's first frame
@@ -26,7 +26,7 @@ var opcodes = map[wire.Opcode]op{
 	0x3649: {"Stats", sheet},
 	0x364A: {"StatsUpdate", sheetUpdate},
 
-	// 39: the lobby, which lists the servers and hands the client to the one picked
+	// the lobby, which lists the servers and hands the client to the one picked
 	0x3901: {"LobbyHandshake", nil}, // the lobby's first frame
 	0x3903: {"LobbyPing", lobbyPing},
 	0x3906: {"Account", account},
@@ -35,20 +35,25 @@ var opcodes = map[wire.Opcode]op{
 	0x390D: {"Join", nil}, // the server picked
 	0x390F: {"Redirect", redirect},
 
-	// 37: movement
+	// movement
 	0x371A: {"Move", moveA},
 	0x371B: {"Move", moveB},
 	0x371C: {"Move", moveB},
 	0x371D: {"Move", nil}, // 9–12 bytes, a sibling
 
-	// 38: skills
+	// skills
 	0x3802: {"Cast", cast},
 	0x3804: {"Hit", hit},
 	0x3805: {"DoT", nil},
 	0x3806: {"CastEnd", castEnd},
+	0x3817: {"Fall", fall},
+
+	// the inventory and the gear
+	0x561D: {"GearScore", gearScore},
+	0x3656: {"CombatPower", combatPower},
 
 	0x8D00: {"Gauges", gauges},
-	0x8D04: {"Owner", owner},
+	0x8D04: {"Kill", kill},
 	0x8D2F: {"Notice", nil}, // text to the players, the same in each of its slots
 	0x921B: {"HP", nil},     // @REVIEW: Gauges carries HP, unsure what this one is
 	0x9702: {"Party", nil},

@@ -26,7 +26,7 @@ a2k conns down.pcap                           # the game's connections, -all for
 
 Example usage of `a2k show`:
 ```
-   21.050  Hit        actor=37365 target=15943 skill=11020000 damage=36 type=2 scalar=10000
+   21.050  Hit        actor=37365 target=15943 skill=11020000 damage=36 type=2 speed=10000
 ```
 
 From the server list on, before a world server is picked:
@@ -90,7 +90,7 @@ jq -r 'select(.opcode == "04 38") | .payload' fight.jsonl | head -1 | base64 -d 
 `a2k show` on the three lines above:
 
 ```
-    0.000  Hit        actor=37365 target=15943 skill=11020000 damage=36 type=2 scalar=10000
+    0.000  Hit        actor=37365 target=15943 skill=11020000 damage=36 type=2 speed=10000
     0.051  Death      entity=15943 flag=3
 ```
 

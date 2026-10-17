@@ -77,7 +77,7 @@ func TestFixtures(t *testing.T) {
 
 func TestParseHit(t *testing.T) {
 	payload := unhex(t, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00")
-	want := game.Hit{Actor: 37365, Target: 15943, Skill: 11020000, Damage: 36, Type: 2, Scalar: 10000}
+	want := game.Hit{Actor: 37365, Target: 15943, Skill: 11020000, Damage: 36, Type: 2, Speed: 10000}
 	if e, err := game.Parse(wire.Frame{Opcode: 0x3804, Payload: payload}); err != nil || !reflect.DeepEqual(e, want) {
 		t.Errorf("got %+v, %v; want %+v", e, err, want)
 	}
@@ -290,6 +290,32 @@ func TestParseGauges(t *testing.T) {
 	}
 }
 
+func TestParseKill(t *testing.T) {
+	for _, tt := range []struct {
+		payload string
+		want    game.Kill
+	}{
+		{"9a a9 03 f4 ee d5 00 80 10 26 05 04 4e 75 72 69 00 00 00 00 00 00 00 00 01 00", game.Kill{Entity: 54426, Actor: 2048, Skill: 14020340, Server: 1318, Name: "Nuri"}},
+		{"de a1 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00", game.Kill{Entity: 53470}},
+		{"87 d7 01 d4 c5 ba 00 e3 0a 26 05 08 74 65 63 68 6e 69 6e 65 07 4f 6c 79 6d 70 75 73 01 00 00 00 00 00 00 01 00", game.Kill{Entity: 27527, Actor: 1379, Skill: 12240340, Server: 1318, Name: "technine", Legion: "Olympus"}},
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: 0x8D04, Payload: unhex(t, tt.payload)})
+		if err != nil || !reflect.DeepEqual(e, tt.want) {
+			t.Errorf("got %+v, %v; want %+v", e, err, tt.want)
+		}
+	}
+}
+
+// A gear score and a combat power are the value now and the highest so far.
+func TestParseScores(t *testing.T) {
+	if e, err := game.Parse(wire.Frame{Opcode: 0x561D, Payload: unhex(t, "bf 02 00 00 d8 02 00 00")}); err != nil || e != (game.GearScore{Now: 703, Best: 728}) {
+		t.Errorf("gear score %+v, %v", e, err)
+	}
+	if e, err := game.Parse(wire.Frame{Opcode: 0x3656, Payload: unhex(t, "95 9d 00 00 00 00 00 00 f1 9d 00 00 00 00 00 00")}); err != nil || e != (game.CombatPower{Now: 40341, Best: 40433}) {
+		t.Errorf("combat power %+v, %v", e, err)
+	}
+}
+
 // reject is a frame Parse refuses, and with which error.
 type reject struct {
 	name    string
@@ -322,6 +348,9 @@ func TestParseRejects(t *testing.T) {
 		{"gauges cut in a hp row", 0x8D00, "e9 21 02 01 00 6e 43 00 00 00 00", game.ErrLayout},
 		{"gauges with a byte too many", 0x8D00, "e9 21 01 01 08 a8 0c 00 00 ff", game.ErrLayout},
 		{"death with a byte too many", 0x3642, "f5 a3 02 00 03 00", game.ErrLayout},
+		{"fall with a byte too many", 0x3817, "80 10 e0 26 00", game.ErrLayout},
+		{"gear score above its best", 0x561D, "d8 02 00 00 bf 02 00 00", game.ErrLayout},
+		{"combat power cut short", 0x3656, "f1 9d 00 00 00 00 00 00 f1 9d 00 00", game.ErrLayout},
 		{"death whose middle varint is not zero", 0x3642, "f5 a3 02 01 03", game.ErrLayout},
 		{"cast with a byte too many", 0x3802, "e4 72 00 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00 00", game.ErrLayout},
 		{"cast whose flag says a position it does not have", 0x3802, "e4 72 00 d8 62 d6 00 0b 02 e4 72 6d d9 90 43 90 4e 01 00", game.ErrLayout},
@@ -330,7 +359,9 @@ func TestParseRejects(t *testing.T) {
 		{"spawn in the layout before October 2026", 0x3641, "a8 81 02 05 20 00 00 00 4a 0f 20 00 00 02 49 f3 d2 c6 e5 d0 00 c7 00 dc 8b 46 7f f8 13 43 39 69 01 c7 01 c7 01", game.ErrLayout},
 		{"spawn whose heading is not followed by 01", 0x3641, "d4 86 01 04 20 00 ce b9 2c 00 00 02 3c bc f3 c7 df 86 d0 c7 00 a8 c0 46 00 5c 94 43 00 d3 02 f3 17 f3 17", game.ErrLayout},
 		{"player whose name is cut short", 0x3645, "e4 72 01 20 00 00 07 06 50 6c 61", game.ErrLayout},
-		{"owner whose name is not utf-8", 0x8D04, "f5 a3 02 60 41 ae 00 c7 7c f8 03 02 ff fe", game.ErrLayout},
+		{"kill whose name is not utf-8", 0x8D04, "f5 a3 02 60 41 ae 00 c7 7c f8 03 02 ff fe", game.ErrLayout},
+		{"kill with a killer and the trailer of none", 0x8D04, "9a a9 03 f4 ee d5 00 80 10 26 05 04 4e 75 72 69 00 00 00 00 00 00 00 00 00 00", game.ErrLayout},
+		{"kill with a byte too many", 0x8D04, "9a a9 03 f4 ee d5 00 80 10 26 05 04 4e 75 72 69 00 00 00 00 00 00 00 00 01 00 00", game.ErrLayout},
 		{"ping a byte short", 0x3603, "00 00 5a 43 39 e5 23 3a 00 00 64 69 0c d3 a0 01 00", game.ErrLayout},
 		{"zone of another entity", 0x3623, "c7 7c 00 00 00 00 00 7e 87 ca c6 82 a0 03 c7 00 50 8d 46", game.ErrLayout},
 		{"name check without its trailing 01", 0x361A, "00 00 02 48 65", game.ErrLayout},

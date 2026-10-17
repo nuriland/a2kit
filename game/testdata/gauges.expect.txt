@@ -1,4 +1,4 @@
-00 8D game.Gauges {Entity:10071 Rows:map[max_hp:15066 max_mp:2774 10:146000 11:150000 12:100000 max_flight:593586]}
+00 8D game.Gauges {Entity:10071 Rows:map[max_hp:15066 max_mp:2774 max_stamina:146000 11:150000 12:100000 max_flight:593586]}
 00 8D game.Gauges {Entity:10071 Rows:map[max_mp:3240]}
 00 8D game.Gauges {Entity:10713 Rows:map[hp:21096]}
 00 8D game.Gauges {Entity:10713 Rows:map[hp:21096 max_hp:21096]}

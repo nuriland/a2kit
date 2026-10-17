@@ -48,7 +48,7 @@ const typesHelp = `What a2k decodes
 A message is one thing the game server sent: a hit, a cast, a clock tick. a2k show writes a
 line each, and a message is one of three:
 
-  decoded       its fields:     21.050  Hit        actor=37365 target=15943 skill=11020000 damage=36 type=2 scalar=10000
+  decoded       its fields:     21.050  Hit        actor=37365 target=15943 skill=11020000 damage=36 type=2 speed=10000
   not decoded   a type a2k names but does not read yet, or does not know:
                                 21.100  Move       (not decoded, 12 bytes)
                                 21.120  E2 38      (unknown type, 9 bytes)

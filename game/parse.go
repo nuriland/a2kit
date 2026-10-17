@@ -61,7 +61,7 @@ func hit(r *reader) Event {
 	r.skip(4) // varies with the skill, not a float
 
 	seq := r.u32()
-	h.Scalar = r.varint()
+	h.Speed = r.varint()
 
 	if sw&0xF != 0 {
 		h.Damage = r.varint()
@@ -126,13 +126,42 @@ func death(r *reader) Event {
 	return d
 }
 
-// owner parses an owner event from a frame
-func owner(r *reader) Event {
-	o := Owner{Entity: r.entity(), Skill: r.skill(), Actor: r.entity()}
-	r.varint() // 504 so far
+// fall parses a fall event from a frame
+func fall(r *reader) Event {
+	f := Fall{Entity: r.entity(), Damage: r.varint()}
+	r.end()
+	return f
+}
 
-	o.Name = r.name()
-	return o
+// gearScore parses the character's gear score from a frame
+func gearScore(r *reader) Event {
+	g := GearScore{Now: r.u32(), Best: r.u32()}
+	if g.Best < g.Now {
+		r.bad = true
+	}
+	r.end()
+	return g
+}
+
+// combatPower parses the character's combat power from a frame
+func combatPower(r *reader) Event {
+	c := CombatPower{Now: r.u64(), Best: r.u64()}
+	if c.Best < c.Now {
+		r.bad = true
+	}
+	r.end()
+	return c
+}
+
+// kill parses a kill event from a frame
+func kill(r *reader) Event {
+	k := Kill{Entity: r.entity(), Skill: r.skill(), Actor: r.entity(), Server: r.u16(), Name: r.name(), Legion: r.name()}
+	r.skip(7)
+	if (r.u16() == 1) != (k.Actor != 0) { // 1 with a killer, 0 without
+		r.bad = true
+	}
+	r.end()
+	return k
 }
 
 // player parses a player event from a frame
@@ -168,7 +197,7 @@ func cast(r *reader) Event {
 		c.Pos = r.pos()
 	}
 
-	r.varint() // the actor's Scalar, as in Hit
+	r.varint() // the actor's Speed, as in Hit
 	r.skip(1)  // 01 or 02 so far
 
 	r.varint() // 0 mostly, else 150 to 111700

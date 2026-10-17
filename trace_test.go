@@ -116,7 +116,7 @@ func TestFight(t *testing.T) {
 func TestNames(t *testing.T) {
 	evs := traceOf(t, logOf(t, Config{Client: true},
 		"0 45 36 server 5HIBIAAABwZQbGF5ZXI=",                             // 14692 is Player
-		"1 04 8D server 9aMCYEGuAMd8+AMHUGxheWVyMg==",                     // 37365 is owned by 15943, Player2
+		"1 04 8D server 9aMCYEGuAMd8+AMHUGxheWVyMgAAAAAAAAAAAQA=",         // 37365 is killed by 15943, Player2
 		"2 45 36 server x3wBIAAABg==",                                     // 15943 again, without a name
 		"3 41 36 server qIECBSAASg8gAAACAAAAAAAAAAAAAAAAAAAAAAAAAccBxwE=", // 32936 spawns as NPC 2101066
 		"4 1A 37 server BQAAAADAfwAAAAAAAAAA",                             // 5 moves to NaN
@@ -125,7 +125,7 @@ func TestNames(t *testing.T) {
 	if want := []string{"Player", "Player2", "npc 2101066", "entity 37365"}; !slices.Equal(tracks(evs, byEntity), want) {
 		t.Errorf("entity tracks %q, want %q", tracks(evs, byEntity), want)
 	}
-	if want := []string{"41 36 Spawn", "45 36 Player", "1A 37 Move", "04 8D Owner", "client 04 38"}; !slices.Equal(tracks(evs, byOpcode), want) {
+	if want := []string{"41 36 Spawn", "45 36 Player", "1A 37 Move", "04 8D Kill", "client 04 38"}; !slices.Equal(tracks(evs, byOpcode), want) {
 		t.Errorf("opcode tracks %q, want %q", tracks(evs, byOpcode), want)
 	}
 	for _, e := range evs {

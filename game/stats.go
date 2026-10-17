@@ -30,6 +30,7 @@ var statNames = func() map[Stat]string {
 		133: "critical_hit_resist",
 		193: "base_hp",
 		205: "move_speed",
+		242: "stamina",
 		282: "combat_speed",
 
 		// combat
@@ -104,3 +105,16 @@ var statNames = func() map[Stat]string {
 	}
 	return m
 }()
+
+type GearScore struct {
+	Now  uint32
+	Best uint32 // the highest so far (sent even when gear is downgraded)
+}
+
+type CombatPower struct {
+	Now  uint64
+	Best uint64 // the highest so far (sent even when gear is downgraded)
+}
+
+func (GearScore) event()   {}
+func (CombatPower) event() {}

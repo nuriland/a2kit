@@ -151,8 +151,8 @@ func (t *trace) add(m Message) {
 		if e.Name != "" {
 			t.entity(e.Entity).name = e.Name
 		}
-	case game.Owner:
-		t.on(e.Entity, "Owner", ts, args)
+	case game.Kill:
+		t.on(e.Entity, "Kill", ts, args)
 		t.entity(e.Actor).name = e.Name
 	case game.Death:
 		t.on(e.Entity, "Death", ts, args)

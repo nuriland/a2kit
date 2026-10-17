@@ -1,6 +1,6 @@
-04 38 game.Hit {Actor:9589 Target:24216 Skill:11290011 Damage:3460 Extra:[] Type:2 Scalar:11650 Mods:128 Direction:2 Form:4 Tail:1551}
-04 38 game.Hit {Actor:9589 Target:24216 Skill:11280010 Damage:549 Extra:[] Type:3 Scalar:11650 Mods:128 Direction:2 Form:4 Tail:371}
-04 38 game.Hit {Actor:9589 Target:24216 Skill:11280010 Damage:580 Extra:[5 5 5] Type:3 Scalar:11650 Mods:128 Direction:2 Form:4 Tail:373}
-04 38 game.Hit {Actor:9589 Target:24216 Skill:11100000 Damage:10554 Extra:[] Type:2 Scalar:11650 Mods:0 Direction:0 Form:0 Tail:0}
-04 38 game.Hit {Actor:9589 Target:48289 Skill:11020010 Damage:755 Extra:[4 4] Type:2 Scalar:11650 Mods:0 Direction:0 Form:0 Tail:0}
+04 38 game.Hit {Actor:9589 Target:24216 Skill:11290011 Damage:3460 Extra:[] Type:2 Speed:11650 Mods:128 Direction:2 Form:4 Tail:1551}
+04 38 game.Hit {Actor:9589 Target:24216 Skill:11280010 Damage:549 Extra:[] Type:3 Speed:11650 Mods:128 Direction:2 Form:4 Tail:371}
+04 38 game.Hit {Actor:9589 Target:24216 Skill:11280010 Damage:580 Extra:[5 5 5] Type:3 Speed:11650 Mods:128 Direction:2 Form:4 Tail:373}
+04 38 game.Hit {Actor:9589 Target:24216 Skill:11100000 Damage:10554 Extra:[] Type:2 Speed:11650 Mods:0 Direction:0 Form:0 Tail:0}
+04 38 game.Hit {Actor:9589 Target:48289 Skill:11020010 Damage:755 Extra:[4 4] Type:2 Speed:11650 Mods:0 Direction:0 Form:0 Tail:0}
 04 38 game: not read

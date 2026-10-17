@@ -687,11 +687,11 @@ func TestEarly(t *testing.T) {
 func TestEarlyLimit(t *testing.T) {
 	d := NewDecoder(Config{})
 	for i := range maxEarly + 10 {
-		feed(d, wiretest.AppendFrame(nil, byte(i), 0x56, 1)) // plausible, and never known
+		feed(d, wiretest.AppendFrame(nil, byte(i), 0x8A, 1)) // plausible, and never known
 	}
 	st := d.streams[key{src: srv, dst: cli}]
-	if len(st.early) != maxEarly || st.early[0].Opcode != Opcode(0x560A) {
-		t.Fatalf("%d early frames, the first %v; want %d, from 0A 56", len(st.early), st.early[0].Opcode, maxEarly)
+	if len(st.early) != maxEarly || st.early[0].Opcode != Opcode(0x8A0A) {
+		t.Fatalf("%d early frames, the first %v; want %d, from 0A 8A", len(st.early), st.early[0].Opcode, maxEarly)
 	}
 	feed(d, slices.Repeat(wiretest.AppendFrame(nil, 0x00, 0x36, 2), 3)) // the first two ticks wait too
 	if n := len(slices.Collect(d.Frames())); n != maxEarly+1 {

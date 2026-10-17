@@ -1,0 +1,5 @@
+56 36 game.CombatPower {Now:31443 Best:40433}
+56 36 game.CombatPower {Now:34358 Best:40433}
+56 36 game.CombatPower {Now:40433 Best:40433}
+56 36 game.CombatPower {Now:40341 Best:40433}
+56 36 game.CombatPower {Now:40333 Best:40433}
