@@ -23,6 +23,8 @@ var opcodes = map[wire.Opcode]op{
 	0x3641: {"Spawn", spawn},
 	0x3642: {"Death", death},
 	0x3645: {"Player", player},
+	0x3649: {"Stats", sheet},
+	0x364A: {"StatsUpdate", sheetUpdate},
 
 	// 39: the lobby, which lists the servers and hands the client to the one picked
 	0x3901: {"LobbyHandshake", nil}, // the lobby's first frame
@@ -45,9 +47,10 @@ var opcodes = map[wire.Opcode]op{
 	0x3805: {"DoT", nil},
 	0x3806: {"CastEnd", castEnd},
 
+	0x8D00: {"Gauges", gauges},
 	0x8D04: {"Owner", owner},
 	0x8D2F: {"Notice", nil}, // text to the players, the same in each of its slots
-	0x921B: {"HP", nil},
+	0x921B: {"HP", nil},     // @REVIEW: Gauges carries HP, unsure what this one is
 	0x9702: {"Party", nil},
 }
 

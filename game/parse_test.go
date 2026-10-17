@@ -263,6 +263,33 @@ func TestRedirectAddr(t *testing.T) {
 	}
 }
 
+func TestParseStats(t *testing.T) {
+	payload := unhex(t, "af 2f 02 41 00 58 02 00 00 7b 01 40 06 00 00 00 00 00 00 00 00 00 00")
+	want := game.Stats{Entity: 6063, Rows: map[game.Stat]int32{65: 600, 379: 1600}}
+	if e, err := game.Parse(wire.Frame{Opcode: 0x364A, Payload: payload}); err != nil || !reflect.DeepEqual(e, want) {
+		t.Errorf("got %+v, %v, want %+v", e, err, want)
+	}
+	if s := fmt.Sprint(want.Rows); s != "map[pvp_damage_boost:600 pve_damage_boost:1600]" {
+		t.Errorf("printed %s", s)
+	}
+}
+
+func TestParseGauges(t *testing.T) {
+	for _, tt := range []struct {
+		payload string
+		want    game.Gauges
+	}{
+		{"d9 53 02 02 00 68 52 00 00 00 00 00 00 07 68 52 00 00 00 00 00 00", game.Gauges{Entity: 10713, Rows: map[game.Gauge]uint64{game.GaugeHP: 21096, game.GaugeMaxHP: 21096}}},
+		{"e9 21 03 01 08 6c 15 00 00 01 07 1c 46 00 00 00 00 00 00", game.Gauges{Entity: 4329, Rows: map[game.Gauge]uint64{game.GaugeMaxMP: 5484, game.GaugeMaxHP: 17948}}},
+		{"af 2f 01 01 06 e4 a4 08 00", game.Gauges{Entity: 6063, Rows: map[game.Gauge]uint64{game.GaugeFlight: 566500}}},
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: 0x8D00, Payload: unhex(t, tt.payload)})
+		if err != nil || !reflect.DeepEqual(e, tt.want) {
+			t.Errorf("got %+v, %v, want %+v", e, err, tt.want)
+		}
+	}
+}
+
 // reject is a frame Parse refuses, and with which error.
 type reject struct {
 	name    string
@@ -283,6 +310,17 @@ func TestParseRejects(t *testing.T) {
 		{"hit without damage whose trailer is not its sequence number", 0x3804, "bd 1a 00 00 bd 1a 54 fc ea 00 02 02 db 90 ca 5b 01 00 00 00 cb 61 02 00", game.ErrLayout},
 		{"hit with bytes after the trailer", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00 ff", game.ErrLayout},
 		{"hit claiming more extra hits than bytes", 0x3804, "c7 7c 24 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 7f 01 00", game.ErrLayout},
+		{"hit of form 4 cut before its tail", 0x3804, "98 bd 01 16 04 f5 4a 8a 1e ac 00 ec 03 80 00 02 fd ed 3b 43 02 00 00 00 82 5b a5 04 02 00", game.ErrLayout},
+		{"hit of a form no fixture has", 0x3804, "98 bd 01 16 02 f5 4a 8a 1e ac 00 ec 03 80 00 02 fd ed 3b 43 02 00 00 00 82 5b a5 04 02 00", game.ErrUnread},
+		{"hit with switch 14 without its byte before the trailer", 0x3804, "98 bd 01 14 00 f5 4a 60 5f a9 00 76 02 8b 41 29 42 02 00 00 00 82 5b ba 52 02 00", game.ErrLayout},
+		{"stat table not opening with 00 00", 0x3649, "01 00 00", game.ErrLayout},
+		{"stat table claiming more rows than bytes", 0x3649, "00 00 7f 01 00 0a 00 00 00", game.ErrLayout},
+		{"stat table whose trailer is not its base hp", 0x3649, "00 00 01 c1 00 21 3a 00 00 00 00 00 00 00 00 00 00", game.ErrLayout},
+		{"stat update whose trailer is not 0 without a base hp row", 0x364A, "af 2f 01 41 00 58 02 00 00 58 02 00 00 00 00 00 00", game.ErrLayout},
+		{"stat update cut in its trailer", 0x364A, "af 2f 00 00 00 00 00", game.ErrLayout},
+		{"gauges with a mask bit no capture has", 0x8D00, "e9 21 04", game.ErrLayout},
+		{"gauges cut in a hp row", 0x8D00, "e9 21 02 01 00 6e 43 00 00 00 00", game.ErrLayout},
+		{"gauges with a byte too many", 0x8D00, "e9 21 01 01 08 a8 0c 00 00 ff", game.ErrLayout},
 		{"death with a byte too many", 0x3642, "f5 a3 02 00 03 00", game.ErrLayout},
 		{"death whose middle varint is not zero", 0x3642, "f5 a3 02 01 03", game.ErrLayout},
 		{"cast with a byte too many", 0x3802, "e4 72 00 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00 00", game.ErrLayout},

@@ -39,7 +39,10 @@ func hit(r *reader) Event {
 		sw = r.varint()
 	)
 
-	r.varint() // 0 so far
+	h.Form = r.varint()
+	if h.Form != 0 && h.Form != 4 {
+		return nil // a form no fixture has, 1 came once on a type 6 hit
+	}
 	h.Actor = r.entity()
 	h.Skill = r.skill()
 	r.skip(1) // the actor's hit count
@@ -63,6 +66,9 @@ func hit(r *reader) Event {
 	if sw&0xF != 0 {
 		h.Damage = r.varint()
 	}
+	if sw&0x1F == 0x14 {
+		r.skip(1) // 01 so far
+	}
 	if sw&0x20 != 0 {
 		n := r.varint()
 		if n > uint32(r.left()) {
@@ -76,6 +82,9 @@ func hit(r *reader) Event {
 	}
 	if seq > 255 || r.u8() != byte(seq) || r.u8() != 0 {
 		r.bad = true
+	}
+	if h.Form == 4 {
+		h.Tail = r.varint()
 	}
 	r.end()
 	return h
@@ -215,6 +224,65 @@ func zone(r *reader) Event {
 	}
 	r.skip(5)
 	return Zone{Pos: r.pos()}
+}
+
+// sheet parses the player's whole stat table from a frame
+func sheet(r *reader) Event {
+	if r.u16() != 0 {
+		r.bad = true
+	}
+	return rows(r, Stats{Full: true})
+}
+
+// sheetUpdate parses the rows of an entity's stat table that changed from a frame
+func sheetUpdate(r *reader) Event { return rows(r, Stats{Entity: r.entity()}) }
+
+// rows reads a stat table's rows into s, and the trailer that repeats its base HP.
+func rows(r *reader, s Stats) Event {
+	n := r.varint()
+	if n > uint32(r.left()/6) { // six bytes a row
+		r.bad = true
+		return nil
+	}
+
+	s.Rows = make(map[Stat]int32, n)
+	for range n {
+		id := Stat(r.u16())
+		s.Rows[id] = int32(r.u32())
+	}
+	if int32(r.u32()) != s.Rows[193] || r.u32() != 0 { // the base HP row again, 0 without it, @TODO: named stats instead of numbers
+		r.bad = true
+	}
+
+	r.end()
+	return s
+}
+
+// gauges parses what changed of an entity's HP, MP and flight time from a frame
+func gauges(r *reader) Event {
+	var (
+		g    = Gauges{Entity: r.entity(), Rows: map[Gauge]uint64{}}
+		mask = r.u8()
+	)
+	if mask&^3 != 0 {
+		r.bad = true
+		return nil
+	}
+
+	if mask&1 != 0 { // MP, flight time and the maxes
+		for range r.u8() {
+			g.Rows[Gauge(r.u8())] = uint64(r.u32())
+		}
+	}
+
+	if mask&2 != 0 { // HP and max HP
+		for range r.u8() {
+			g.Rows[Gauge(r.u8())] = r.u64()
+		}
+	}
+
+	r.end()
+	return g
 }
 
 // nameCheck parses a name check event from a frame
