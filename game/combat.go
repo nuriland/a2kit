@@ -28,7 +28,7 @@ type CastEnd struct {
 	Skill Skill
 }
 
-// Kill reports an entity's HP reaching 0 and who did it. Actor is 0 when nothing in view did.
+// Kill reports an entity's HP reaching 0 and who did it. Actor is 0 on a summon running out.
 type Kill struct {
 	Entity, Actor Entity
 	Skill         Skill

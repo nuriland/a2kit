@@ -121,8 +121,9 @@ func TestNames(t *testing.T) {
 		"3 41 36 server qIECBSAASg8gAAACAAAAAAAAAAAAAAAAAAAAAAAAAccBxwE=", // 32936 spawns as NPC 2101066
 		"4 1A 37 server BQAAAADAfwAAAAAAAAAA",                             // 5 moves to NaN
 		"5 04 38 client x3w=",
+		"6 04 8D server 3qEDAAAAAAAAAAAAAAAAAAAAAAAA", // 53470 is a summon running out
 	))
-	if want := []string{"Player", "Player2", "npc 2101066", "entity 37365"}; !slices.Equal(tracks(evs, byEntity), want) {
+	if want := []string{"Player", "Player2", "npc 2101066", "entity 37365", "entity 53470"}; !slices.Equal(tracks(evs, byEntity), want) { // no track for actor 0
 		t.Errorf("entity tracks %q, want %q", tracks(evs, byEntity), want)
 	}
 	if want := []string{"41 36 Spawn", "45 36 Player", "1A 37 Move", "04 8D Kill", "client 04 38"}; !slices.Equal(tracks(evs, byOpcode), want) {
