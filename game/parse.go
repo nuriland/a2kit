@@ -133,6 +133,33 @@ func spawn(r *reader) Event {
 	return s
 }
 
+func object(r *reader) Event {
+	o := Object{Entity: r.entity(), Mask: r.u16(), Type: r.u32(), Pos: r.pos()}
+	if o.Mask&^0xD != 0 {
+		return nil
+	}
+	r.skip(4)
+	o.Heading = r.f32()
+	if r.u16() != 0x101 {
+		r.bad = true
+	}
+	o.State = r.u8()
+	o.Since = unixMilli(int64(r.u64()))
+
+	if o.Mask&1 != 0 {
+		r.skip(4)
+	}
+	r.skip(14)
+	if o.Mask&8 != 0 {
+		r.skip(4)
+	}
+	if r.u8() != 0 {
+		r.bad = true
+	}
+	r.end()
+	return o
+}
+
 // death parses a death event from a frame
 func death(r *reader) Event {
 	d := Death{Entity: r.entity()}

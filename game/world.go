@@ -1,5 +1,7 @@
 package game
 
+import "time"
+
 // Spawn announces a mob or summon entering view
 type Spawn struct {
 	Entity    Entity
@@ -8,6 +10,17 @@ type Spawn struct {
 	Mask      uint16  // its low byte varies with the kind of entity
 	Heading   float32 // degrees
 	HP, MaxHP uint32  // HP never passes MaxHP, which is one value per NPC except on summons
+	Pos
+}
+
+// Object announces a thing in the world a player can use entering view
+type Object struct {
+	Entity  Entity
+	Mask    uint16    // which bytes follow, 4 mostly, 12 and 1 on a few types
+	Type    uint32    // the type of the object (id)
+	State   byte      // 1 mostly, 6 on one just reset
+	Heading float32   // degrees
+	Since   time.Time // likely when it last appeared
 	Pos
 }
 
@@ -37,6 +50,7 @@ type NameCheck struct {
 }
 
 func (Spawn) event()     {}
+func (Object) event()    {}
 func (Player) event()    {}
 func (Move) event()      {}
 func (Zone) event()      {}

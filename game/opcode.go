@@ -20,6 +20,8 @@ var opcodes = map[wire.Opcode]op{
 	0x361A: {"NameCheck", nameCheck},
 	0x3623: {"Zone", zone},
 	0x3633: {"Self", self},
+	0x3634: {"Object", object},
+	0x3635: {"ObjectState", nil},
 	0x3641: {"Spawn", spawn},
 	0x3642: {"Death", death},
 	0x3645: {"Player", player},

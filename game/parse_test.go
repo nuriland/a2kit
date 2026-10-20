@@ -325,6 +325,22 @@ func TestParseKill(t *testing.T) {
 	}
 }
 
+func TestParseObject(t *testing.T) {
+	for _, tt := range []struct {
+		payload string
+		want    game.Object
+	}{
+		{"e9 db 01 04 00 a7 4f 12 00 00 e0 79 c5 80 7d af 47 00 66 ac 46 00 00 00 00 00 00 00 00 01 01 01 dc 1a 0a 55 a1 01 00 00 00 00 00 00 00 00 00 00 24 4d c5 12 07 00 00", game.Object{Entity: 28137, Mask: 4, Type: 1200039, State: 1, Since: time.Date(2026, 10, 19, 16, 41, 28, 28e6, time.UTC), Pos: game.Pos{X: -3998.0, Y: 89851.0, Z: 22067.0}}},                                    // the hidden cube of song-hidden-cube-hunt3.pcap
+		{"f8 8f 02 0c 00 e1 52 12 00 b2 62 d9 c7 d3 f9 c8 c7 16 1a b5 46 00 00 00 00 00 00 00 00 01 01 01 a9 23 5f 39 a1 01 00 00 00 00 00 00 00 00 00 00 8b 6e 27 de 08 00 12 35 27 07 00", game.Object{Entity: 34808, Mask: 12, Type: 1200865, State: 1, Since: time.Date(2026, 10, 14, 7, 44, 58, 793e6, time.UTC), Pos: game.Pos{X: -111301.390625, Y: -102899.6484375, Z: 23181.04296875}}}, // mask 12, a u32 more after the u16
+		{"d6 c4 01 01 00 e1 c8 10 00 ab 87 c1 c7 5a eb bb c7 00 39 14 47 00 00 00 00 00 00 00 00 01 01 01 33 1f 5f 39 a1 01 00 00 00 00 00 00 2c c5 c9 3e d3 73 5c 1b 00 00 00 00 07 00 00", game.Object{Entity: 25174, Mask: 1, Type: 1100001, State: 1, Since: time.Date(2026, 10, 14, 7, 44, 57, 651e6, time.UTC), Pos: game.Pos{X: -99087.3359375, Y: -96214.703125, Z: 37945.0}}},           // mask 1, a u32 more after the clock
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: 0x3634, Payload: unhex(t, tt.payload)})
+		if err != nil || !reflect.DeepEqual(e, tt.want) {
+			t.Errorf("got %+v, %v; want %+v", e, err, tt.want)
+		}
+	}
+}
+
 func TestParseSpawnCorpse(t *testing.T) {
 	e, err := game.Parse(wire.Frame{Opcode: 0x3641, Payload: unhex(t, "e3 d2 02 0d 20 00 7d 0c 20 00 40 02 a3 82 5a c7 e4 96 5c 47 00 94 1c 46 44 fa 28 43 29 78 00 00 94 a7 07")})
 	if s, ok := e.(game.Spawn); err != nil || !ok || s.HP != 0 || s.MaxHP != 119700 || s.NPC != 2100349 {
@@ -392,6 +408,10 @@ func TestParseRejects(t *testing.T) {
 		{"spawn whose heading is not followed by 01", 0x3641, "d4 86 01 04 20 00 ce b9 2c 00 00 02 3c bc f3 c7 df 86 d0 c7 00 a8 c0 46 00 5c 94 43 00 d3 02 f3 17 f3 17", game.ErrLayout},
 		{"spawn with a flag no fixture has", 0x3641, "a0 8c 02 1c 00 02 7f 8e 2c 00", game.ErrUnread},
 		{"spawn whose owner is cut short", 0x3641, "a0 8c 02 1c 00 01 03 53 6f", game.ErrLayout},
+		{"object with a mask no fixture has", 0x3634, "e9 db 01 02 00 a7 4f 12 00 00 e0 79 c5 80 7d af 47 00 66 ac 46 00 00 00 00 00 00 00 00 01 01 01 dc 1a 0a 55 a1 01 00 00 00 00 00 00 00 00 00 00 24 4d c5 12 07 00 00", game.ErrUnread},
+		{"object without its 01 01", 0x3634, "e9 db 01 04 00 a7 4f 12 00 00 e0 79 c5 80 7d af 47 00 66 ac 46 00 00 00 00 00 00 00 00 01 02 01 dc 1a 0a 55 a1 01 00 00 00 00 00 00 00 00 00 00 24 4d c5 12 07 00 00", game.ErrLayout},
+		{"object whose last byte is not 00", 0x3634, "e9 db 01 04 00 a7 4f 12 00 00 e0 79 c5 80 7d af 47 00 66 ac 46 00 00 00 00 00 00 00 00 01 01 01 dc 1a 0a 55 a1 01 00 00 00 00 00 00 00 00 00 00 24 4d c5 12 07 00 01", game.ErrLayout},
+		{"object of mask 12 cut before its extra u32", 0x3634, "f8 8f 02 0c 00 e1 52 12 00 b2 62 d9 c7 d3 f9 c8 c7 16 1a b5 46 00 00 00 00 00 00 00 00 01 01 01 a9 23 5f 39 a1 01 00 00 00 00 00 00 00 00 00 00 8b 6e 27 de 08 00", game.ErrLayout},
 		{"player whose name is cut short", 0x3645, "e4 72 01 20 00 00 07 06 50 6c 61", game.ErrLayout},
 		{"kill whose name is not utf-8", 0x8D04, "f5 a3 02 60 41 ae 00 c7 7c f8 03 02 ff fe 00 00 00 00 00 00 00 00 01 00", game.ErrLayout},
 		{"kill with a killer and the trailer of none", 0x8D04, "9a a9 03 f4 ee d5 00 80 10 26 05 04 4e 75 72 69 00 00 00 00 00 00 00 00 00 00", game.ErrLayout},

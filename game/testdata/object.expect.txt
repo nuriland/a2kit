@@ -1,0 +1,7 @@
+34 36 game.Object {Entity:25174 Mask:1 Type:1100001 State:1 Heading:0 Since:2026-10-14 07:44:57.651 +0000 UTC Pos:{X:-99087.336 Y:-96214.7 Z:37945}}
+34 36 game.Object {Entity:34808 Mask:12 Type:1200865 State:1 Heading:0 Since:2026-10-14 07:44:58.793 +0000 UTC Pos:{X:-111301.39 Y:-102899.65 Z:23181.043}}
+34 36 game.Object {Entity:36858 Mask:4 Type:1500022 State:1 Heading:0 Since:2026-10-19 13:02:45.825 +0000 UTC Pos:{X:76291 Y:160217 Z:29080}}
+34 36 game.Object {Entity:44544 Mask:4 Type:1200691 State:1 Heading:305.15625 Since:2026-10-19 06:25:01.724 +0000 UTC Pos:{X:-15878 Y:16460 Z:20082}}
+34 36 game.Object {Entity:28137 Mask:4 Type:1200039 State:1 Heading:0 Since:2026-10-19 16:41:28.028 +0000 UTC Pos:{X:-3998 Y:89851 Z:22067}}
+34 36 game.Object {Entity:51338 Mask:4 Type:1500021 State:1 Heading:0 Since:2026-10-19 16:33:04.127 +0000 UTC Pos:{X:-7732 Y:88952 Z:24113}}
+34 36 game.Object {Entity:28137 Mask:4 Type:1200039 State:6 Heading:0 Since:2026-10-19 16:41:28.028 +0000 UTC Pos:{X:-3998 Y:89851 Z:22067}}
