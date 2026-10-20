@@ -1,6 +1,6 @@
-04 8D game.Kill {Entity:37365 Actor:15943 Skill:11420000 Server:1016 Name:Play Legion:}
-04 8D game.Kill {Entity:31355 Actor:15943 Skill:11420000 Server:1016 Name:Play Legion:}
-04 8D game.Kill {Entity:33204 Actor:15943 Skill:11020000 Server:1016 Name:Play Legion:}
-04 8D game.Kill {Entity:54426 Actor:2048 Skill:14020340 Server:1318 Name:Nuri Legion:}
-04 8D game.Kill {Entity:53470 Actor:0 Skill:0 Server:0 Name: Legion:}
-04 8D game.Kill {Entity:27527 Actor:1379 Skill:12240340 Server:1318 Name:technine Legion:Olympus}
+04 8D game.Kill {Entity:37365 Actor:15943 Skill:11420000 Server:1016 Name:Play Legion: NPC:0}
+04 8D game.Kill {Entity:31355 Actor:15943 Skill:11420000 Server:1016 Name:Play Legion: NPC:0}
+04 8D game.Kill {Entity:33204 Actor:15943 Skill:11020000 Server:1016 Name:Play Legion: NPC:0}
+04 8D game.Kill {Entity:54426 Actor:2048 Skill:14020340 Server:1318 Name:Nuri Legion: NPC:0}
+04 8D game.Kill {Entity:53470 Actor:0 Skill:0 Server:0 Name: Legion: NPC:0}
+04 8D game.Kill {Entity:27527 Actor:1379 Skill:12240340 Server:1318 Name:technine Legion:Olympus NPC:0}

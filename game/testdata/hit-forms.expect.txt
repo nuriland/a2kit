@@ -1,6 +1,6 @@
-04 38 game.Hit {Actor:9589 Target:24216 Skill:11290011 Damage:3460 Extra:[] Type:2 Speed:11650 Mods:128 Direction:2 Form:4 Tail:1551}
-04 38 game.Hit {Actor:9589 Target:24216 Skill:11280010 Damage:549 Extra:[] Type:3 Speed:11650 Mods:128 Direction:2 Form:4 Tail:371}
-04 38 game.Hit {Actor:9589 Target:24216 Skill:11280010 Damage:580 Extra:[5 5 5] Type:3 Speed:11650 Mods:128 Direction:2 Form:4 Tail:373}
-04 38 game.Hit {Actor:9589 Target:24216 Skill:11100000 Damage:10554 Extra:[] Type:2 Speed:11650 Mods:0 Direction:0 Form:0 Tail:0}
-04 38 game.Hit {Actor:9589 Target:48289 Skill:11020010 Damage:755 Extra:[4 4] Type:2 Speed:11650 Mods:0 Direction:0 Form:0 Tail:0}
-04 38 game: not read
+04 38 game.Hit {Actor:9589 Target:24216 Skill:11290011 Effect:1129001111 Damage:3460 Extra:[] Type:2 Speed:11650 Mods:128 Direction:2 Form:4 Tail:1551 Effects:[] Buffs:[]}
+04 38 game.Hit {Actor:9589 Target:24216 Skill:11280010 Effect:1128001021 Damage:549 Extra:[] Type:3 Speed:11650 Mods:128 Direction:2 Form:4 Tail:371 Effects:[] Buffs:[]}
+04 38 game.Hit {Actor:9589 Target:24216 Skill:11280010 Effect:1128001011 Damage:580 Extra:[5 5 5] Type:3 Speed:11650 Mods:128 Direction:2 Form:4 Tail:373 Effects:[] Buffs:[]}
+04 38 game.Hit {Actor:9589 Target:24216 Skill:11100000 Effect:1110000011 Damage:10554 Extra:[] Type:2 Speed:11650 Mods:0 Direction:0 Form:0 Tail:0 Effects:[] Buffs:[]}
+04 38 game.Hit {Actor:9589 Target:48289 Skill:11020010 Effect:1102001011 Damage:755 Extra:[4 4] Type:2 Speed:11650 Mods:0 Direction:0 Form:0 Tail:0 Effects:[] Buffs:[]}
+04 38 game.Hit {Actor:24787 Target:9589 Skill:1223360 Effect:122336012 Damage:0 Extra:[] Type:6 Speed:10000 Mods:0 Direction:0 Form:1 Tail:0 Effects:[12233601] Buffs:[]}

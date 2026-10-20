@@ -40,6 +40,7 @@ var opcodes = map[wire.Opcode]op{
 	0x371B: {"Move", moveB},
 	0x371C: {"Move", moveB},
 	0x371D: {"Move", nil}, // 9–12 bytes, a sibling
+	0x3749: {"Sit", nil},
 
 	// skills
 	0x3802: {"Cast", cast},
@@ -50,6 +51,8 @@ var opcodes = map[wire.Opcode]op{
 
 	// the inventory and the gear
 	0x561D: {"GearScore", gearScore},
+	0x561E: {"Loot", nil},   // an item on the ground, from a kill or a mining node, and where
+	0x561F: {"Looted", nil}, // who took it
 	0x3656: {"CombatPower", combatPower},
 
 	0x8D00: {"Gauges", gauges},

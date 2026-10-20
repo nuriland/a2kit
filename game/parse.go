@@ -40,8 +40,8 @@ func hit(r *reader) Event {
 	)
 
 	h.Form = r.varint()
-	if h.Form != 0 && h.Form != 4 {
-		return nil // a form no fixture has, 1 came once on a type 6 hit
+	if h.Form&^0x15 != 0 {
+		return nil
 	}
 	h.Actor = r.entity()
 	h.Skill = r.skill()
@@ -53,14 +53,16 @@ func hit(r *reader) Event {
 	case 0, 4:
 	case 6:
 		h.Mods = r.u8()
-		r.skip(1) // 00
+		r.varint() // 0 unless Mods has bit 0x20
 		h.Direction = r.u8()
 	default:
-		return nil // a form no fixture has
+		return nil
 	}
-	r.skip(4) // varies with the skill, not a float
+	h.Effect = r.u32()
 
-	seq := r.u32()
+	if r.u32() > 255 { // counts the cast's hits on the target, 1 to 5 so far
+		r.bad = true
+	}
 	h.Speed = r.varint()
 
 	if sw&0xF != 0 {
@@ -80,11 +82,21 @@ func hit(r *reader) Event {
 			h.Extra[i] = r.varint()
 		}
 	}
-	if seq > 255 || r.u8() != byte(seq) || r.u8() != 0 {
+	if h.Form&1 != 0 {
+		h.Effects = r.u32s()
+	}
+	if sw&0x40 != 0 {
+		h.Buffs = r.u32s()
+	}
+	r.skip(1) // the low byte of the count, except on some of a mob's hits
+	if r.u8() != 0 {
 		r.bad = true
 	}
-	if h.Form == 4 {
+	if h.Form&4 != 0 {
 		h.Tail = r.varint()
+	}
+	if h.Form&0x10 != 0 && sw&0xF == 4 {
+		r.skip(1) // 01 so far
 	}
 	r.end()
 	return h
@@ -93,7 +105,13 @@ func hit(r *reader) Event {
 // spawn parses a spawn event from a frame
 func spawn(r *reader) Event {
 	s := Spawn{Entity: r.entity(), Mask: r.u16()}
-	r.varint()
+	switch r.varint() {
+	case 0:
+	case 1:
+		s.Owner = r.name()
+	default:
+		return nil
+	}
 	s.NPC = r.npc()
 	flags := r.u8()
 	if r.u8() != 2 {
@@ -107,11 +125,11 @@ func spawn(r *reader) Event {
 	if flags&8 != 0 {
 		r.skip(12) // three floats near 0
 	}
-	if r.u8() != 1 { // 01 so far
+	alive := r.u8() // 01, or 00 on a corpse
+	s.HP, s.MaxHP = r.varint(), r.varint()
+	if alive > 1 || alive == 0 && s.HP != 0 {
 		r.bad = true
 	}
-
-	s.HP, s.MaxHP = r.varint(), r.varint()
 	return s
 }
 
@@ -156,10 +174,16 @@ func combatPower(r *reader) Event {
 // kill parses a kill event from a frame
 func kill(r *reader) Event {
 	k := Kill{Entity: r.entity(), Skill: r.skill(), Actor: r.entity(), Server: r.u16(), Name: r.name(), Legion: r.name()}
-	r.skip(7)
-	if (r.u16() == 1) != (k.Actor != 0) { // 1 with a killer, 0 without
+	if (r.u16() != 0) != (k.Legion != "") { // 1 with a legion
 		r.bad = true
 	}
+	k.NPC = NPC(r.varint())
+	r.skip(4) // a u32, 0 but on some summons running out
+
+	if (r.u8() == 1) != (k.Actor != 0 || k.Skill != 0) { // 1 with a killer or a skill
+		r.bad = true
+	}
+	r.skip(1) // 0 when a player killed a mob, 1 when a player killed a player, 2 when no player or entity is credited
 	r.end()
 	return k
 }
@@ -184,7 +208,10 @@ func character(r *reader, self bool) Event {
 // cast parses a cast event from a frame
 func cast(r *reader) Event {
 	c := Cast{Actor: r.entity()}
-	r.skip(1) // 00 so far
+	flags := r.u8()
+	if flags&^0xC != 0 {
+		return nil
+	}
 
 	c.Skill = r.skill()
 	r.skip(1) // counts the actor's casts
@@ -201,6 +228,12 @@ func cast(r *reader) Event {
 	r.skip(1)  // 01 or 02 so far
 
 	r.varint() // 0 mostly, else 150 to 111700
+	if flags&4 != 0 {
+		c.Count = r.u8()
+	}
+	if flags&8 != 0 {
+		c.Tail = r.varint()
+	}
 	r.end()
 	return c
 }

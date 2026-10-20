@@ -77,7 +77,7 @@ func TestFixtures(t *testing.T) {
 
 func TestParseHit(t *testing.T) {
 	payload := unhex(t, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00")
-	want := game.Hit{Actor: 37365, Target: 15943, Skill: 11020000, Damage: 36, Type: 2, Speed: 10000}
+	want := game.Hit{Actor: 37365, Target: 15943, Skill: 11020000, Effect: 1101000011, Damage: 36, Type: 2, Speed: 10000}
 	if e, err := game.Parse(wire.Frame{Opcode: 0x3804, Payload: payload}); err != nil || !reflect.DeepEqual(e, want) {
 		t.Errorf("got %+v, %v; want %+v", e, err, want)
 	}
@@ -93,6 +93,21 @@ func TestParseHit(t *testing.T) {
 	}
 }
 
+func TestParseHitTrailer(t *testing.T) {
+	for _, tt := range []struct {
+		payload string
+		want    game.Hit
+	}{
+		{"c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 02 00", game.Hit{Actor: 37365, Target: 15943, Skill: 11020000, Effect: 1101000011, Damage: 36, Type: 2, Speed: 10000}},
+		{"d9 12 00 00 bb b0 03 e2 7d 18 00 04 02 54 2c 91 09 01 00 00 00 90 4e 0c 00", game.Hit{Actor: 55355, Target: 2393, Skill: 1605090, Effect: 160509012, Type: 2, Speed: 10000}}, // without damage
+	} {
+		e, err := game.Parse(wire.Frame{Opcode: 0x3804, Payload: unhex(t, tt.payload)})
+		if err != nil || !reflect.DeepEqual(e, tt.want) {
+			t.Errorf("got %+v, %v; want %+v", e, err, tt.want)
+		}
+	}
+}
+
 // A cast's byte after the counter says whether a position follows, 02, or not, 00.
 func TestParseCast(t *testing.T) {
 	for _, tt := range []struct {
@@ -101,7 +116,9 @@ func TestParseCast(t *testing.T) {
 	}{
 		{"e4 72 00 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00", game.Cast{Actor: 14692, Target: 14692, Skill: 14050008}},
 		{"c7 7c 00 f0 4d a8 00 04 02 c7 7c 22 7f a4 c2 2d 71 c9 c6 fd 85 04 c7 b6 5b 8d 46 90 4e 01 00", game.Cast{Actor: 15943, Target: 15943, Skill: 11030000, Pos: game.Pos{X: -25784.588, Y: -33925.99, Z: 18093.855}}},
-		{"bd 1a 00 54 fc ea 00 02 00 bd 1a 4d c3 aa 42 cb 61 01 94 b3 03", game.Cast{Actor: 3389, Target: 3389, Skill: 15400020}}, // a trailer past 0
+		{"bd 1a 00 54 fc ea 00 02 00 bd 1a 4d c3 aa 42 cb 61 01 94 b3 03", game.Cast{Actor: 3389, Target: 3389, Skill: 15400020}},
+		{"b2 53 08 14 3b 05 01 07 00 b2 53 44 78 3b 41 86 5d 01 00 b0 54", game.Cast{Actor: 10674, Target: 10674, Skill: 17120020, Tail: 10800}},
+		{"d9 12 0c b8 7d 14 01 75 00 d9 12 7d bf f9 40 d6 6c 01 00 01 88 59", game.Cast{Actor: 2393, Target: 2393, Skill: 18120120, Count: 1, Tail: 11400}},
 	} {
 		e, err := game.Parse(wire.Frame{Opcode: 0x3802, Payload: unhex(t, tt.payload)})
 		if err != nil || !reflect.DeepEqual(e, tt.want) {
@@ -298,11 +315,20 @@ func TestParseKill(t *testing.T) {
 		{"9a a9 03 f4 ee d5 00 80 10 26 05 04 4e 75 72 69 00 00 00 00 00 00 00 00 01 00", game.Kill{Entity: 54426, Actor: 2048, Skill: 14020340, Server: 1318, Name: "Nuri"}},
 		{"de a1 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00", game.Kill{Entity: 53470}},
 		{"87 d7 01 d4 c5 ba 00 e3 0a 26 05 08 74 65 63 68 6e 69 6e 65 07 4f 6c 79 6d 70 75 73 01 00 00 00 00 00 00 01 00", game.Kill{Entity: 27527, Actor: 1379, Skill: 12240340, Server: 1318, Name: "technine", Legion: "Olympus"}},
+		{"a4 4f a4 f4 16 00 c8 80 03 00 00 00 00 00 00 ae b2 8c 01 00 00 00 00 01 02", game.Kill{Entity: 10148, Actor: 49224, Skill: 1504420, NPC: 2300206}},                                                   // by a mob, which has no server or name
+		{"bb 5c e4 cd e5 00 dc 3e 26 05 04 53 6f 6e 67 06 41 73 63 65 6e 64 01 00 00 00 00 00 00 01 01", game.Kill{Entity: 11835, Actor: 8028, Skill: 15060452, Server: 1318, Name: "Song", Legion: "Ascend"}}, // of a player, ending in 01 01
 	} {
 		e, err := game.Parse(wire.Frame{Opcode: 0x8D04, Payload: unhex(t, tt.payload)})
 		if err != nil || !reflect.DeepEqual(e, tt.want) {
 			t.Errorf("got %+v, %v; want %+v", e, err, tt.want)
 		}
+	}
+}
+
+func TestParseSpawnCorpse(t *testing.T) {
+	e, err := game.Parse(wire.Frame{Opcode: 0x3641, Payload: unhex(t, "e3 d2 02 0d 20 00 7d 0c 20 00 40 02 a3 82 5a c7 e4 96 5c 47 00 94 1c 46 44 fa 28 43 29 78 00 00 94 a7 07")})
+	if s, ok := e.(game.Spawn); err != nil || !ok || s.HP != 0 || s.MaxHP != 119700 || s.NPC != 2100349 {
+		t.Errorf("got %+v, %v", e, err)
 	}
 }
 
@@ -332,8 +358,11 @@ func TestParseRejects(t *testing.T) {
 		{"hit with switch nibble 6 cut in its three bytes", 0x3804, "c7 7c 06 00 f5 a3 02 e0 26 a8 00 00 02 00 00", game.ErrLayout},
 		{"hit with switch nibble 5", 0x3804, "c7 7c 05 00 f5 a3 02 e0 26 a8 00 00 02 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 90 4e 20 01 00", game.ErrUnread},
 		{"hit whose type does not fit a byte", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 ac 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00", game.ErrLayout},
-		{"hit whose trailer is not its sequence number", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 02 00", game.ErrLayout},
-		{"hit without damage whose trailer is not its sequence number", 0x3804, "bd 1a 00 00 bd 1a 54 fc ea 00 02 02 db 90 ca 5b 01 00 00 00 cb 61 02 00", game.ErrLayout},
+		{"hit whose trailer does not end in 00", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 01", game.ErrLayout},
+		{"hit whose count passes 255", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 00 01 00 00 90 4e 24 01 00", game.ErrLayout},
+		{"hit with more buffs than bytes", 0x3804, "e8 4c 44 00 fa e7 03 d7 f4 16 00 04 02 07 a4 f7 08 01 00 00 00 90 4e f5 28 ff f5 f8 4c 48 01 00", game.ErrLayout},
+		{"hit of form 1 cut in its effects", 0x3804, "e8 4c 00 01 fa e7 03 d7 f4 16 00 04 06 08 a4 f7 08 01 00 00 00 90 4e 01 67 90", game.ErrLayout},
+		{"hit of form 0x10 without its byte after the trailer", 0x3804, "d9 12 44 10 ab 90 01 18 7e 18 00 08 02 6b 41 91 09 01 00 00 00 90 4e e3 13 01 77 b7 a3 6f 01 00", game.ErrLayout},
 		{"hit with bytes after the trailer", 0x3804, "c7 7c 04 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 01 00 ff", game.ErrLayout},
 		{"hit claiming more extra hits than bytes", 0x3804, "c7 7c 24 00 f5 a3 02 e0 26 a8 00 00 02 4b ed 9f 41 01 00 00 00 90 4e 24 7f 01 00", game.ErrLayout},
 		{"hit of form 4 cut before its tail", 0x3804, "98 bd 01 16 04 f5 4a 8a 1e ac 00 ec 03 80 00 02 fd ed 3b 43 02 00 00 00 82 5b a5 04 02 00", game.ErrLayout},
@@ -354,14 +383,22 @@ func TestParseRejects(t *testing.T) {
 		{"death whose middle varint is not zero", 0x3642, "f5 a3 02 01 03", game.ErrLayout},
 		{"cast with a byte too many", 0x3802, "e4 72 00 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00 00", game.ErrLayout},
 		{"cast whose flag says a position it does not have", 0x3802, "e4 72 00 d8 62 d6 00 0b 02 e4 72 6d d9 90 43 90 4e 01 00", game.ErrLayout},
+		{"cast with a flag no fixture has", 0x3802, "e4 72 10 d8 62 d6 00 0b 00 e4 72 6d d9 90 43 90 4e 01 00", game.ErrUnread},
+		{"cast with flag 8 and no tail", 0x3802, "b2 53 08 14 3b 05 01 07 00 b2 53 44 78 3b 41 86 5d 01 00", game.ErrLayout},
 		{"cast end with a byte too many", 0x3806, "c7 7c e0 26 a8 00 01 0c 00", game.ErrLayout},
 		{"move 1B 37 whose flag adds a byte it does not have", 0x371B, "e4 72 05 03 2b d5 bc c6 01 6f 24 c7 6a 42 8c", game.ErrLayout},
 		{"spawn in the layout before October 2026", 0x3641, "a8 81 02 05 20 00 00 00 4a 0f 20 00 00 02 49 f3 d2 c6 e5 d0 00 c7 00 dc 8b 46 7f f8 13 43 39 69 01 c7 01 c7 01", game.ErrLayout},
+		{"spawn with 00 before an HP above 0", 0x3641, "e3 d2 02 0d 20 00 7d 0c 20 00 40 02 a3 82 5a c7 e4 96 5c 47 00 94 1c 46 44 fa 28 43 29 78 00 05 94 a7 07", game.ErrLayout},
 		{"spawn whose heading is not followed by 01", 0x3641, "d4 86 01 04 20 00 ce b9 2c 00 00 02 3c bc f3 c7 df 86 d0 c7 00 a8 c0 46 00 5c 94 43 00 d3 02 f3 17 f3 17", game.ErrLayout},
+		{"spawn with a flag no fixture has", 0x3641, "a0 8c 02 1c 00 02 7f 8e 2c 00", game.ErrUnread},
+		{"spawn whose owner is cut short", 0x3641, "a0 8c 02 1c 00 01 03 53 6f", game.ErrLayout},
 		{"player whose name is cut short", 0x3645, "e4 72 01 20 00 00 07 06 50 6c 61", game.ErrLayout},
 		{"kill whose name is not utf-8", 0x8D04, "f5 a3 02 60 41 ae 00 c7 7c f8 03 02 ff fe 00 00 00 00 00 00 00 00 01 00", game.ErrLayout},
 		{"kill with a killer and the trailer of none", 0x8D04, "9a a9 03 f4 ee d5 00 80 10 26 05 04 4e 75 72 69 00 00 00 00 00 00 00 00 00 00", game.ErrLayout},
 		{"kill with a byte too many", 0x8D04, "9a a9 03 f4 ee d5 00 80 10 26 05 04 4e 75 72 69 00 00 00 00 00 00 00 00 01 00 00", game.ErrLayout},
+		{"kill with a legion and the byte of none", 0x8D04, "87 d7 01 d4 c5 ba 00 e3 0a 26 05 08 74 65 63 68 6e 69 6e 65 07 4f 6c 79 6d 70 75 73 00 00 00 00 00 00 00 01 00", game.ErrLayout},
+		{"kill by a mob without its trailer", 0x8D04, "a4 4f a4 f4 16 00 c8 80 03 00 00 00 00 00 00 ae b2 8c 01 00 00 00", game.ErrLayout},
+		{"kill by a mob whose trailer is 00 00", 0x8D04, "a4 4f a4 f4 16 00 c8 80 03 00 00 00 00 00 00 ae b2 8c 01 00 00 00 00 00 00", game.ErrLayout},
 		{"ping a byte short", 0x3603, "00 00 5a 43 39 e5 23 3a 00 00 64 69 0c d3 a0 01 00", game.ErrLayout},
 		{"zone of another entity", 0x3623, "c7 7c 00 00 00 00 00 7e 87 ca c6 82 a0 03 c7 00 50 8d 46", game.ErrLayout},
 		{"name check without its trailing 01", 0x361A, "00 00 02 48 65", game.ErrLayout},

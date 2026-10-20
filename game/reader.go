@@ -78,6 +78,21 @@ func (r *reader) u64() uint64 {
 	return 0
 }
 
+// u32s reads a count byte and that many u32.
+func (r *reader) u32s() []uint32 {
+	n := int(r.u8())
+	if n > r.left()/4 {
+		r.bad = true
+		return nil
+	}
+
+	s := make([]uint32, n)
+	for i := range s {
+		s[i] = r.u32()
+	}
+	return s
+}
+
 // f32 reads a 32-bit floating point number.
 func (r *reader) f32() float32 { return math.Float32frombits(r.u32()) }
 

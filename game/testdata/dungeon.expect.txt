@@ -1,0 +1,17 @@
+04 38 game.Hit {Actor:62458 Target:9832 Skill:1504471 Effect:150447111 Damage:5237 Extra:[] Type:2 Speed:10000 Mods:0 Direction:0 Form:0 Tail:0 Effects:[] Buffs:[1213004021]}
+04 38 game.Hit {Actor:62458 Target:9832 Skill:1504410 Effect:150441011 Damage:982 Extra:[] Type:2 Speed:10000 Mods:144 Direction:2 Form:16 Tail:0 Effects:[] Buffs:[1213004021]}
+04 38 game.Hit {Actor:55355 Target:9832 Skill:1605070 Effect:160507011 Damage:1540 Extra:[] Type:2 Speed:10000 Mods:144 Direction:2 Form:16 Tail:0 Effects:[] Buffs:[1207000711 1873000211]}
+04 38 game.Hit {Actor:18475 Target:2393 Skill:1605144 Effect:160514411 Damage:2531 Extra:[] Type:2 Speed:10000 Mods:0 Direction:0 Form:16 Tail:0 Effects:[] Buffs:[1873000311]}
+04 38 game.Hit {Actor:62458 Target:9832 Skill:1504471 Effect:150447112 Damage:0 Extra:[] Type:6 Speed:10000 Mods:0 Direction:0 Form:1 Tail:0 Effects:[15044711] Buffs:[]}
+04 38 game.Hit {Actor:62458 Target:2258 Skill:1504430 Effect:150443012 Damage:0 Extra:[] Type:6 Speed:10000 Mods:0 Direction:0 Form:1 Tail:0 Effects:[12000173 15044311] Buffs:[]}
+04 38 game.Hit {Actor:62458 Target:9832 Skill:1504410 Effect:150441011 Damage:1538 Extra:[] Type:2 Speed:10000 Mods:33 Direction:2 Form:0 Tail:0 Effects:[] Buffs:[]}
+04 38 game.Hit {Actor:55355 Target:2393 Skill:1605090 Effect:160509012 Damage:0 Extra:[] Type:2 Speed:10000 Mods:0 Direction:0 Form:0 Tail:0 Effects:[] Buffs:[]}
+04 38 game.Hit {Actor:52041 Target:7148 Skill:1600920 Effect:160092011 Damage:5938 Extra:[] Type:2 Speed:10000 Mods:0 Direction:2 Form:0 Tail:0 Effects:[] Buffs:[]}
+04 38 game.Hit {Actor:52041 Target:7148 Skill:1600920 Effect:160092012 Damage:0 Extra:[] Type:2 Speed:10000 Mods:0 Direction:0 Form:0 Tail:0 Effects:[] Buffs:[]}
+02 38 game.Cast {Actor:10674 Target:10674 Skill:17120020 Pos:{X:0 Y:0 Z:0} Count:0 Tail:10800}
+02 38 game.Cast {Actor:2393 Target:2393 Skill:18120120 Pos:{X:0 Y:0 Z:0} Count:1 Tail:11400}
+41 36 game.Spawn {Entity:34336 Owner:Son NPC:2920063 Mask:28 Heading:131.07126 HP:3 MaxHP:3 Pos:{X:10586.994 Y:4721.435 Z:889}}
+41 36 game.Spawn {Entity:41274 Owner:Hazex NPC:2920650 Mask:31 Heading:327.1859 HP:13108 MaxHP:13108 Pos:{X:9901.126 Y:3835.5896 Z:893}}
+04 8D game.Kill {Entity:10148 Actor:49224 Skill:1504420 Server:0 Name: Legion: NPC:2300206}
+04 8D game.Kill {Entity:14793 Actor:52041 Skill:1601050 Server:0 Name: Legion: NPC:2300218}
+04 8D game.Kill {Entity:55457 Actor:0 Skill:0 Server:0 Name: Legion: NPC:0}
