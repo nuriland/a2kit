@@ -140,7 +140,7 @@ func fields(e game.Event) string {
 			case float32:
 				fmt.Fprintf(&b, "%.1f", x)
 			case time.Time:
-				b.WriteString(x.Local().Format("15:04:05.000"))
+				b.WriteString(x.Local().Format("2006-01-02T15:04:05.000"))
 			case string:
 				if strings.ContainsAny(x, " \"=") {
 					x = fmt.Sprintf("%q", x)
